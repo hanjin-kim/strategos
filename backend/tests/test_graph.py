@@ -488,19 +488,77 @@ def test_all_queries_nonexistent_unit_return_empty() -> None:
 # 15. GraphTools: get_tool_definitions -> returns 4 tools
 # ---------------------------------------------------------------------------
 
-def test_get_tool_definitions_returns_four_tools() -> None:
+def test_get_tool_definitions_returns_six_tools() -> None:
     g = RelationshipGraph()
     tools = GraphTools(g)
     definitions = tools.get_tool_definitions()
 
-    assert len(definitions) == 4
+    assert len(definitions) == 6
     names = {d["function"]["name"] for d in definitions}
     assert names == {
         "query_supply_chain",
         "query_affected_units",
         "query_fire_support",
         "query_command_chain",
+        "query_controlled_units",
+        "query_command_scope",
     }
+
+
+# ---------------------------------------------------------------------------
+# 16. GraphTools: query_command_scope
+# ---------------------------------------------------------------------------
+
+def test_query_command_scope_returns_commanded_units() -> None:
+    g = RelationshipGraph()
+    g.add_entity("cmd_a", EntityType.COMMANDER, {"side": "BLUE"})
+    g.add_entity("unit_x", EntityType.UNIT, {"side": "BLUE"})
+    g.add_entity("unit_y", EntityType.UNIT, {"side": "BLUE"})
+    g.add_relationship("cmd_a", "unit_x", RelationType.COMMANDS)
+    g.add_relationship("cmd_a", "unit_y", RelationType.COMMANDS)
+
+    tools = GraphTools(g)
+    result = tools.query_command_scope("cmd_a")
+
+    assert result["commander_id"] == "cmd_a"
+    assert set(result["commanded_unit_ids"]) == {"unit_x", "unit_y"}
+
+
+def test_query_command_scope_no_commands_returns_empty() -> None:
+    g = RelationshipGraph()
+    g.add_entity("cmd_b", EntityType.COMMANDER, {"side": "BLUE"})
+
+    tools = GraphTools(g)
+    result = tools.query_command_scope("cmd_b")
+
+    assert result["commander_id"] == "cmd_b"
+    assert result["commanded_unit_ids"] == []
+
+
+def test_query_command_scope_nonexistent_commander_returns_empty() -> None:
+    g = RelationshipGraph()
+    tools = GraphTools(g)
+    result = tools.query_command_scope("no_such_cmd")
+
+    assert result["commander_id"] == "no_such_cmd"
+    assert result["commanded_unit_ids"] == []
+
+
+def test_query_command_scope_excludes_non_unit_targets() -> None:
+    """COMMANDS edge pointing to a Force entity should not appear in commanded_unit_ids."""
+    g = RelationshipGraph()
+    g.add_entity("cmd_c", EntityType.COMMANDER, {"side": "BLUE"})
+    g.add_entity("unit_z", EntityType.UNIT, {"side": "BLUE"})
+    g.add_entity("blue_force", EntityType.FORCE, {"name": "Blue Force"})
+    g.add_relationship("cmd_c", "unit_z", RelationType.COMMANDS)
+    # Non-standard edge to a Force — should be filtered out
+    g._graph.add_edge("cmd_c", "blue_force", rel_type="COMMANDS")
+
+    tools = GraphTools(g)
+    result = tools.query_command_scope("cmd_c")
+
+    assert "unit_z" in result["commanded_unit_ids"]
+    assert "blue_force" not in result["commanded_unit_ids"]
 
 
 def test_get_tool_definitions_structure() -> None:

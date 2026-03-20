@@ -137,11 +137,25 @@ class TurnManager:
             # Step 3: Battalion commanders generate MilitaryActions
             bn_actions = self._get_battalion_actions(side)
 
-            # Step 4: Validate
-            result = self.constraint_engine.validate(bn_actions, self.game_state)
+            # Step 4: Build authority map from graph (commander_id -> set of allowed unit_ids)
+            authority_map: dict[str, set[str]] = {}
+            if self.relationship_graph:
+                from app.graph.graph_tools import GraphTools
+                graph_tools = GraphTools(self.relationship_graph)
+                for agent in self.agents.values():
+                    if isinstance(agent, BattalionCommander) and agent.commander.side == side:
+                        scope = graph_tools.query_command_scope(agent.commander.id)
+                        if scope["commanded_unit_ids"]:
+                            authority_map[agent.commander.id] = set(scope["commanded_unit_ids"])
+
+            # Step 5: Validate
+            result = self.constraint_engine.validate(
+                bn_actions, self.game_state,
+                authority_map=authority_map if authority_map else None,
+            )
             valid = list(result.valid_actions)
 
-            # Step 5: Retry rejected (1 attempt)
+            # Step 6: Retry rejected (1 attempt)
             if result.has_rejections:
                 logger.info(
                     "Turn %d %s: %d actions rejected, retrying",

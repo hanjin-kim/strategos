@@ -18,7 +18,12 @@ class ValidationResult:
 class ConstraintEngine:
     """Validates all agent actions against game rules. Prevents numeric hallucination."""
 
-    def validate(self, actions: list[MilitaryAction], game_state) -> ValidationResult:
+    def validate(
+        self,
+        actions: list[MilitaryAction],
+        game_state,
+        authority_map: dict[str, set[str]] | None = None,
+    ) -> ValidationResult:
         """Validate all actions. Return valid ones and rejections with reasons."""
         valid = []
         rejections = []
@@ -33,11 +38,26 @@ class ConstraintEngine:
             reason = self._validate_action(action, game_state)
             if reason:
                 rejections.append((action, reason))
-            else:
-                valid.append(action)
-                seen_unit_ids.add(action.unit_id)
+                continue
+
+            if authority_map:
+                reason = self._validate_authority(action, authority_map)
+                if reason:
+                    rejections.append((action, reason))
+                    continue
+
+            valid.append(action)
+            seen_unit_ids.add(action.unit_id)
 
         return ValidationResult(valid_actions=valid, rejections=rejections)
+
+    def _validate_authority(self, action: MilitaryAction, authority_map: dict[str, set[str]]) -> str | None:
+        allowed = authority_map.get(action.commander_id, set())
+        if not allowed:
+            return None  # No authority data, skip check
+        if action.unit_id not in allowed:
+            return f"Commander {action.commander_id} has no authority over unit {action.unit_id}"
+        return None
 
     def _validate_action(self, action: MilitaryAction, game_state) -> str | None:
         """Return rejection reason or None if valid."""

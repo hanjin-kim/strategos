@@ -323,3 +323,29 @@ class TestConstraintEngine:
         result = self.engine.validate([action], self.state)
         assert len(result.rejections) == 1
         assert "target_hex" in result.rejections[0][1]
+
+    # Authority validation tests
+
+    def test_authority_validation_allowed(self):
+        """Commander in authority_map with correct unit -> passes."""
+        action = _make_action(action_type=ActionType.HOLD, target_hex=None)
+        authority_map = {"cmd-blue": {"blue-1"}}
+        result = self.engine.validate([action], self.state, authority_map=authority_map)
+        assert len(result.valid_actions) == 1
+        assert len(result.rejections) == 0
+
+    def test_authority_validation_denied(self):
+        """Commander tries to command unit not in authority_map -> rejected."""
+        action = _make_action(action_type=ActionType.HOLD, target_hex=None)
+        authority_map = {"cmd-blue": {"blue-99"}}  # blue-1 not in allowed set
+        result = self.engine.validate([action], self.state, authority_map=authority_map)
+        assert len(result.valid_actions) == 0
+        assert len(result.rejections) == 1
+        assert "no authority" in result.rejections[0][1]
+
+    def test_authority_validation_no_map(self):
+        """No authority_map provided -> all otherwise-valid actions pass (backward compat)."""
+        action = _make_action(action_type=ActionType.HOLD, target_hex=None)
+        result = self.engine.validate([action], self.state, authority_map=None)
+        assert len(result.valid_actions) == 1
+        assert len(result.rejections) == 0

@@ -15,12 +15,12 @@ class TheaterCommander(BaseCommander):
     def _build_persona(self) -> str:
         return (
             f"You are {self.commander.name}, Theater Commander for {self.commander.side.value} forces.\n"
-            "Your role: Set strategic direction and assign missions to subordinate units.\n"
-            "Output: JSON array of mission orders. Each order:\n"
-            '{"target_unit_id": "unit_id", "mission": "ATTACK|DEFEND|DELAY|RESERVE|WITHDRAW", '
+            "COMMAND AUTHORITY: You issue mission orders ONLY to units listed in 'controlled_units'.\n"
+            "You MUST NOT issue orders to units not in your command authority.\n"
+            "Output: JSON array of mission orders for your controlled units. Each order:\n"
+            '{"target_unit_id": "unit_id_from_controlled_units", '
+            '"mission": "ATTACK|DEFEND|DELAY|RESERVE|WITHDRAW", '
             '"objective_hex": {"q": N, "r": N} or null, "priority": 1-5, "reasoning": "..."}\n'
-            "Constraints: You cannot directly control individual tactical actions. "
-            "Only assign high-level missions (ATTACK/DEFEND/DELAY/RESERVE/WITHDRAW)."
         )
 
     def decide(self, game_state) -> list[OrderDirective]:

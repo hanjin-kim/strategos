@@ -112,6 +112,35 @@ class GraphTools:
             "sibling_units": siblings,
         }
 
+    def query_controlled_units(self, commander_id: str) -> list[str]:
+        """Get IDs of all units directly commanded by this commander."""
+        g = self.graph._graph
+        if not g.has_node(commander_id):
+            return []
+
+        controlled = []
+        for _, target, data in g.out_edges(commander_id, data=True):
+            if data.get("rel_type") == RelationType.COMMANDS.value:
+                controlled.append(target)
+        return controlled
+
+    def query_command_scope(self, commander_id: str) -> dict:
+        """Get all units this commander has authority over via COMMANDS relationship.
+        Returns {"commanded_unit_ids": [...], "commander_id": commander_id}"""
+        g = self.graph._graph
+        if not g.has_node(commander_id):
+            return {"commanded_unit_ids": [], "commander_id": commander_id}
+
+        commanded = []
+        for _, target, data in g.out_edges(commander_id, data=True):
+            if data.get("rel_type") == RelationType.COMMANDS.value:
+                # Only include Unit entities (not Force or other types)
+                target_type = g.nodes[target].get("entity_type")
+                if target_type == EntityType.UNIT.value:
+                    commanded.append(target)
+
+        return {"commanded_unit_ids": commanded, "commander_id": commander_id}
+
     def query_nearby_units(self, unit_id: str, friendly_only: bool = False) -> dict:
         """Get units connected via ADJACENT_TO or THREATENS."""
         g = self.graph._graph
@@ -183,6 +212,30 @@ class GraphTools:
                         "type": "object",
                         "properties": {"unit_id": {"type": "string"}},
                         "required": ["unit_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "query_controlled_units",
+                    "description": "Get IDs of all units directly commanded by this commander.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"commander_id": {"type": "string"}},
+                        "required": ["commander_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "query_command_scope",
+                    "description": "Get all units a commander has authority over via COMMANDS relationship.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"commander_id": {"type": "string"}},
+                        "required": ["commander_id"],
                     },
                 },
             },

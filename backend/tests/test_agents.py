@@ -109,11 +109,58 @@ def test_build_context_required_keys():
 
     assert "turn" in ctx
     assert "commander" in ctx
-    assert "own_units" in ctx
+    assert "command_authority" in ctx
+    assert "controlled_units" in ctx
+    assert "friendly_units" in ctx
     assert "known_enemy" in ctx
     assert "relationships" in ctx
     assert "recent_memory" in ctx
     assert "orders_from_superior" in ctx
+
+
+from app.graph.graph_tools import GraphTools
+from app.graph.relationship_graph import RelationshipGraph
+from app.graph.military_ontology import EntityType, RelationType
+
+
+def test_build_context_controlled_vs_friendly():
+    gs = make_game_state()
+    rg = RelationshipGraph()
+    # Add units to graph
+    rg.add_entity("blue1", EntityType.UNIT)
+    rg.add_entity("blue2", EntityType.UNIT)
+    # Add commander to graph
+    rg.add_entity("bcmd1", EntityType.COMMANDER)
+    # COMMANDS relationship: bcmd1 commands blue1, but NOT blue2
+    rg.add_relationship("bcmd1", "blue1", RelationType.COMMANDS)
+
+    gt = GraphTools(rg)
+    cmd = make_commander("bcmd1", Side.BLUE, "blue1")
+    agent = BattalionCommander(commander=cmd, llm_config={}, graph_tools=gt)
+
+    visible = agent._apply_fog_of_war(gs)
+    ctx = agent._build_context(visible, {}, gs)
+
+    controlled_ids = {u["id"] for u in ctx["controlled_units"]}
+    friendly_ids = {u["id"] for u in ctx["friendly_units"]}
+
+    assert "blue1" in controlled_ids
+    assert "blue2" not in controlled_ids
+    assert "blue2" in friendly_ids
+    assert "blue1" not in friendly_ids
+    # command_authority must list the commanded unit
+    assert "blue1" in ctx["command_authority"]
+    assert "blue2" not in ctx["command_authority"]
+
+
+def test_build_context_no_graph_falls_back_to_unit_id():
+    """Without graph_tools, command_authority defaults to commander.unit_id."""
+    gs = make_game_state()
+    agent = make_blue_battalion_commander()  # no graph_tools
+    visible = agent._apply_fog_of_war(gs)
+    ctx = agent._build_context(visible, {}, gs)
+
+    assert ctx["command_authority"] == [agent.commander.unit_id]
 
 
 def test_build_context_turn_value():

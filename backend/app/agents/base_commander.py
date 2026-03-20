@@ -78,16 +78,29 @@ class BaseCommander:
 
     def _build_context(self, visible_state: dict, graph_context: dict, game_state) -> dict:
         """Build JSON context for LLM prompt."""
-        own_units_data = []
+        controlled_ids = set()
+        if self.graph_tools:
+            controlled_ids = set(self.graph_tools.query_controlled_units(self.commander.id))
+
+        controlled_units_data = []
+        friendly_units_data = []
+
         for u in visible_state["own_units"]:
-            if u.status != UnitStatus.DESTROYED:
-                own_units_data.append({
-                    "id": u.id, "name": u.name, "type": u.unit_type.value,
-                    "position": {"q": u.position.q, "r": u.position.r},
-                    "strength": u.strength, "morale": u.morale,
-                    "movement_points": u.movement_points, "ammo": u.ammo,
-                    "status": u.status.value,
-                })
+            if u.status == UnitStatus.DESTROYED:
+                continue
+            
+            u_data = {
+                "id": u.id, "name": u.name, "type": u.unit_type.value,
+                "position": {"q": u.position.q, "r": u.position.r},
+                "strength": u.strength, "morale": u.morale,
+                "movement_points": u.movement_points, "ammo": u.ammo,
+                "status": u.status.value,
+            }
+            
+            if u.id in controlled_ids:
+                controlled_units_data.append(u_data)
+            else:
+                friendly_units_data.append(u_data)
 
         enemy_data = []
         for u in visible_state["known_enemy"]:
@@ -105,7 +118,9 @@ class BaseCommander:
             "turn": game_state.turn,
             "commander": {"id": self.commander.id, "name": self.commander.name, "rank": self.commander.rank},
             "orders_from_superior": orders_ctx,
-            "own_units": own_units_data,
+            "command_authority": sorted(controlled_ids) if controlled_ids else [self.commander.unit_id],
+            "controlled_units": controlled_units_data,
+            "friendly_units": friendly_units_data,
             "known_enemy": enemy_data,
             "relationships": graph_context,
             "recent_memory": self.memory.to_context_string(),
@@ -120,6 +135,7 @@ class BaseCommander:
             "supply_chain": self.graph_tools.query_supply_chain(unit_id),
             "command_chain": self.graph_tools.query_command_chain(unit_id),
             "nearby": self.graph_tools.query_nearby_units(unit_id),
+            "command_scope": self.graph_tools.query_command_scope(self.commander.id),
         }
 
     def _call_llm(self, system_prompt: str, user_message: str) -> str | None:
@@ -170,6 +186,15 @@ class BaseCommander:
                     reasoning=item.get("reasoning", ""),
                 )
                 actions.append(action)
+
+            # Filter to only commanded units
+            if self.graph_tools:
+                scope = self.graph_tools.query_command_scope(self.commander.id)
+                allowed = set(scope["commanded_unit_ids"])
+                if not allowed:
+                    allowed = {self.commander.unit_id}
+                actions = [a for a in actions if a.unit_id in allowed]
+
             self._consecutive_failures = 0
             return actions
         except Exception as e:

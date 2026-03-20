@@ -18,12 +18,14 @@ class BattalionCommander(BaseCommander):
     def _build_persona(self) -> str:
         return (
             f"You are {self.commander.name}, Battalion Commander for {self.commander.side.value} forces.\n"
-            "Your role: Execute tactical actions based on orders from your superior.\n"
-            "Output: JSON array of actions for your unit(s). Each action:\n"
-            '{"unit_id": "your_unit_id", "action_type": "MOVE|ATTACK|DEFEND|RETREAT|HOLD", '
+            f"COMMAND AUTHORITY: You command ONLY unit '{self.commander.unit_id}'. "
+            "You MUST NOT issue orders for any other unit.\n"
+            "SITUATIONAL AWARENESS: You can see friendly_units for coordination, "
+            "but you cannot command them.\n"
+            "Output: JSON array with exactly ONE action for YOUR unit:\n"
+            '{"unit_id": "YOUR_UNIT_ID", "action_type": "MOVE|ATTACK|DEFEND|RETREAT|HOLD", '
             '"target_hex": {"q": N, "r": N} or null, "target_unit_id": "enemy_id" or null, '
             '"priority": 1-5, "reasoning": "..."}\n'
-            "You may only command units under your direct control."
         )
 
     def decide(self, game_state) -> list[MilitaryAction]:
