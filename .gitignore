@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+*.db
+
+# Node
+node_modules/
+frontend/dist/
+
+# Environment
+.env
+
+# Data
+data/
+*.jsonl
+
+# IDE
+.vscode/
+.idea/
+
+# OMC state
+.omc/
