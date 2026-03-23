@@ -1,4 +1,4 @@
-"""Tests for the STRATEGOS Business Competition PoC."""
+"""Tests for the STRATEGOS Business Competition PoC — business-independent stack."""
 from __future__ import annotations
 
 import json
@@ -6,13 +6,12 @@ import os
 
 import pytest
 
-from app.agents.base_commander import DOCTRINE_PROMPT, BaseCommander
 from app.batch.analysis_engine import AnalysisEngine
 from app.batch.batch_runner import BatchRunner
 from app.batch.parameter_set import ParameterSet
 from app.batch.report_generator import ReportGenerator
-from app.engine.game_state import GameState
-from app.models.domain import Commander, Side
+from app.domains.business.state import BusinessState
+from app.domains.business.agents import BusinessAgent, BusinessCEO
 from app.prompts.business_doctrine import BUSINESS_DOCTRINE, BUSINESS_PERSONA_TEMPLATES
 
 
@@ -31,20 +30,16 @@ def _load_scenario() -> dict:
         return json.load(f)
 
 
-def _minimal_commander(rank: str = "Battalion", side: Side = Side.BLUE) -> Commander:
-    return Commander(id="test_cmd", name="Test", side=side, rank=rank, unit_id="unit_1")
-
-
 # ---------------------------------------------------------------------------
-# 1. Scenario loads as GameState
+# 1. Scenario loads as BusinessState
 # ---------------------------------------------------------------------------
 
 def test_ev_battery_scenario_loads():
     scenario = _load_scenario()
-    gs = GameState(scenario)
-    assert len(gs.units) > 0
-    assert len(gs.terrain) > 0
-    assert len(gs.commanders) > 0
+    state = BusinessState(scenario)
+    assert len(state.units) > 0
+    assert len(state.market_map) > 0
+    assert len(state.commanders) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -53,15 +48,15 @@ def test_ev_battery_scenario_loads():
 
 def test_scenario_blue_unit_count():
     scenario = _load_scenario()
-    gs = GameState(scenario)
-    blue_units = gs.get_units_by_side(Side.BLUE)
+    state = BusinessState(scenario)
+    blue_units = state.get_units_by_side("BLUE")
     assert len(blue_units) == 6
 
 
 def test_scenario_red_unit_count():
     scenario = _load_scenario()
-    gs = GameState(scenario)
-    red_units = gs.get_units_by_side(Side.RED)
+    state = BusinessState(scenario)
+    red_units = state.get_units_by_side("RED")
     assert len(red_units) == 6
 
 
@@ -71,15 +66,15 @@ def test_scenario_red_unit_count():
 
 def test_scenario_blue_commander_count():
     scenario = _load_scenario()
-    gs = GameState(scenario)
-    blue_cmds = [c for c in gs.commanders.values() if c.side == Side.BLUE]
+    state = BusinessState(scenario)
+    blue_cmds = [c for c in state.commanders.values() if c["side"] == "BLUE"]
     assert len(blue_cmds) == 7
 
 
 def test_scenario_red_commander_count():
     scenario = _load_scenario()
-    gs = GameState(scenario)
-    red_cmds = [c for c in gs.commanders.values() if c.side == Side.RED]
+    state = BusinessState(scenario)
+    red_cmds = [c for c in state.commanders.values() if c["side"] == "RED"]
     assert len(red_cmds) == 7
 
 
@@ -103,44 +98,34 @@ def test_business_persona_templates_has_all_ranks():
 
 
 # ---------------------------------------------------------------------------
-# 6. doctrine_override flows through to _build_cached_system_prompt
+# 6. BusinessAgent doctrine flows through to _build_persona
 # ---------------------------------------------------------------------------
 
-def test_doctrine_override_used_in_system_prompt():
-    cmd = _minimal_commander()
-    llm_config = {"api_key": "", "base_url": "", "model": ""}
-    agent = BaseCommander.__new__(BaseCommander)
-    # Call __init__ directly via super-safe instantiation
-    BaseCommander.__init__(
-        agent,
-        commander=cmd,
-        llm_config=llm_config,
-        doctrine_override="CUSTOM DOCTRINE",
-    )
-    prompt = agent._build_cached_system_prompt()
-    assert "CUSTOM DOCTRINE" in prompt
+def test_doctrine_in_business_agent():
+    cmd = {
+        "id": "test_cmd", "name": "Test Commander", "side": "BLUE",
+        "rank": "Battalion", "unit_id": "unit_1", "personality_traits": {},
+    }
+    agent = BusinessAgent(cmd, {"api_key": "", "base_url": "", "model": ""}, doctrine="CUSTOM DOCTRINE")
+    assert agent._doctrine == "CUSTOM DOCTRINE"
 
 
 # ---------------------------------------------------------------------------
-# 7. doctrine_override=None uses default DOCTRINE_PROMPT (backward compat)
+# 7. BusinessCEO has correct rank detection
 # ---------------------------------------------------------------------------
 
-def test_doctrine_override_none_uses_default():
-    cmd = _minimal_commander()
-    llm_config = {"api_key": "", "base_url": "", "model": ""}
-    agent = BaseCommander.__new__(BaseCommander)
-    BaseCommander.__init__(
-        agent,
-        commander=cmd,
-        llm_config=llm_config,
-        doctrine_override=None,
-    )
-    prompt = agent._build_cached_system_prompt()
-    assert DOCTRINE_PROMPT in prompt
+def test_business_ceo_is_ceo_type():
+    cmd = {
+        "id": "ceo1", "name": "CEO Test", "side": "BLUE",
+        "rank": "Theater", "unit_id": "hq_unit", "personality_traits": {},
+    }
+    ceo = BusinessCEO(cmd, {"api_key": "", "base_url": "", "model": ""})
+    assert isinstance(ceo, BusinessAgent)
+    assert isinstance(ceo, BusinessCEO)
 
 
 # ---------------------------------------------------------------------------
-# 8. BatchRunner with doctrine_override creates agents with business doctrine
+# 8. BatchRunner with doctrine_override creates agents
 # ---------------------------------------------------------------------------
 
 def test_batch_runner_doctrine_override_propagates():
@@ -148,32 +133,15 @@ def test_batch_runner_doctrine_override_propagates():
     runner = BatchRunner(scenario, "ev_test", doctrine_override=BUSINESS_DOCTRINE)
     assert runner.doctrine_override == BUSINESS_DOCTRINE
 
-    from app.engine.game_state import GameState as GS
-    from app.graph.relationship_graph import RelationshipGraph
-    from app.graph.graph_tools import GraphTools
-
-    gs = GS(scenario)
-    rg = RelationshipGraph()
-    rg.load_from_scenario(scenario, gs)
-    gt = GraphTools(rg)
-
-    llm_config = {"api_key": "", "base_url": "", "model": ""}
-    agents = runner._create_agents(gs, llm_config, gt)
-
-    # Every agent should have doctrine_override set
-    for agent in agents.values():
-        assert agent._doctrine_override == BUSINESS_DOCTRINE
-        prompt = agent._build_cached_system_prompt()
-        assert "BUSINESS STRATEGY DOCTRINE" in prompt
-
 
 # ---------------------------------------------------------------------------
 # 9. Single run with business scenario completes (max_turns=3)
 # ---------------------------------------------------------------------------
 
 def test_single_run_business_scenario_completes():
+    import app.domains.business  # noqa: F401
     scenario = _load_scenario()
-    runner = BatchRunner(scenario, "ev_test", doctrine_override=BUSINESS_DOCTRINE)
+    runner = BatchRunner(scenario, "ev_test")
     params = ParameterSet(name="quick", rng_seed=42, max_turns=3, use_llm=False)
     result = runner._execute_single_run(0, params)
     assert result.status == "COMPLETED"
@@ -186,8 +154,9 @@ def test_single_run_business_scenario_completes():
 # ---------------------------------------------------------------------------
 
 def test_batch_run_n3_all_complete():
+    import app.domains.business  # noqa: F401
     scenario = _load_scenario()
-    runner = BatchRunner(scenario, "ev_test", doctrine_override=BUSINESS_DOCTRINE)
+    runner = BatchRunner(scenario, "ev_test")
     param_sets = [ParameterSet(name=f"run_{i}", rng_seed=i, max_turns=3, use_llm=False) for i in range(3)]
     batch = runner.run_batch(param_sets)
     assert batch.total_runs == 3
@@ -201,12 +170,12 @@ def test_batch_run_n3_all_complete():
 # ---------------------------------------------------------------------------
 
 def test_report_generates_with_business_batch():
+    import app.domains.business  # noqa: F401
     scenario = _load_scenario()
-    runner = BatchRunner(scenario, "ev_test", doctrine_override=BUSINESS_DOCTRINE)
+    runner = BatchRunner(scenario, "ev_test")
     param_sets = [ParameterSet(name=f"r{i}", rng_seed=i, max_turns=3, use_llm=False) for i in range(3)]
     batch = runner.run_batch(param_sets)
 
-    # Build run dicts manually (as OutcomeCollector would store them)
     runs = [
         {
             "status": r.status,

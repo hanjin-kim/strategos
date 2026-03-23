@@ -231,25 +231,53 @@ class TurnLoop:
                     except Exception:
                         pass
 
-            # Business-style: apply market share changes via strength proxy
+            # Business-style: apply market share changes
             if atk_id and atk_share_change and not atk_losses:
                 unit = self.state.get_unit(atk_id) if hasattr(self.state, "get_unit") else None
                 if unit:
-                    new_str = max(0.0, min(1.0, unit.strength + atk_share_change))
-                    try:
-                        self.state.update_unit(atk_id, strength=round(new_str, 3))
-                    except Exception:
-                        pass
+                    if hasattr(unit, "market_share"):
+                        new_share = max(0.0, min(1.0, unit.market_share + atk_share_change))
+                        try:
+                            self.state.update_unit(atk_id, market_share=round(new_share, 4))
+                        except Exception:
+                            pass
+                    else:
+                        new_str = max(0.0, min(1.0, unit.strength + atk_share_change))
+                        try:
+                            self.state.update_unit(atk_id, strength=round(new_str, 3))
+                        except Exception:
+                            pass
 
             if def_id and def_share_change and not def_losses:
                 unit = self.state.get_unit(def_id) if hasattr(self.state, "get_unit") else None
                 if unit:
-                    new_str = max(0.0, min(1.0, unit.strength + def_share_change))
-                    updates = {"strength": round(new_str, 3)}
-                    if new_str <= 0:
-                        updates["status"] = "DESTROYED"
+                    if hasattr(unit, "market_share"):
+                        new_share = max(0.0, min(1.0, unit.market_share + def_share_change))
+                        updates: dict = {"market_share": round(new_share, 4)}
+                        if new_share <= 0:
+                            updates["status"] = "BANKRUPT"
+                        try:
+                            self.state.update_unit(def_id, **updates)
+                        except Exception:
+                            pass
+                    else:
+                        new_str = max(0.0, min(1.0, unit.strength + def_share_change))
+                        updates2: dict = {"strength": round(new_str, 3)}
+                        if new_str <= 0:
+                            updates2["status"] = "DESTROYED"
+                        try:
+                            self.state.update_unit(def_id, **updates2)
+                        except Exception:
+                            pass
+
+            # Business-style: marketing budget drain
+            budget_drain = combat.get("attacker_budget_drain", 0)
+            if atk_id and budget_drain:
+                unit = self.state.get_unit(atk_id) if hasattr(self.state, "get_unit") else None
+                if unit and hasattr(unit, "marketing_budget"):
+                    new_budget = max(0.0, unit.marketing_budget - budget_drain)
                     try:
-                        self.state.update_unit(def_id, **updates)
+                        self.state.update_unit(atk_id, marketing_budget=round(new_budget, 3))
                     except Exception:
                         pass
 

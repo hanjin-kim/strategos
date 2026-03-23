@@ -22,6 +22,18 @@ from app.models.domain import Side
 logger = logging.getLogger(__name__)
 
 
+def _unit_side(u) -> str:
+    """Return unit side as plain string regardless of enum or str."""
+    s = u.side
+    return s.value if hasattr(s, "value") else str(s)
+
+
+def _unit_status(u) -> str:
+    """Return unit status as plain string regardless of enum or str."""
+    st = u.status
+    return st.value if hasattr(st, "value") else str(st)
+
+
 class RunResult(BaseModel):
     """Result of a single simulation run."""
     run_index: int
@@ -230,17 +242,22 @@ class BatchRunner:
         result = loop.run_simulation(max_turns=params.max_turns)
         elapsed = int((_time.time() - run_start) * 1000)
 
-        winner = self._determine_winner(state)
+        winner = self._determine_winner_generic(state)
 
-        from app.models.domain import UnitStatus
+        dead_statuses = ("DESTROYED", "ROUTED", "BANKRUPT")
         blue_units = [
             u for u in state.units.values()
-            if u.side == Side.BLUE and u.status not in (UnitStatus.DESTROYED, UnitStatus.ROUTED)
+            if _unit_side(u) == "BLUE" and _unit_status(u) not in dead_statuses
         ] if hasattr(state, "units") else []
         red_units = [
             u for u in state.units.values()
-            if u.side == Side.RED and u.status not in (UnitStatus.DESTROYED, UnitStatus.ROUTED)
+            if _unit_side(u) == "RED" and _unit_status(u) not in dead_statuses
         ] if hasattr(state, "units") else []
+
+        def _strength(u) -> float:
+            if hasattr(u, "market_share"):
+                return u.market_share
+            return getattr(u, "strength", 0.0)
 
         return RunResult(
             run_index=run_index,
@@ -251,10 +268,10 @@ class BatchRunner:
             blue_units_remaining=len(blue_units),
             red_units_remaining=len(red_units),
             blue_avg_strength=round(
-                sum(u.strength for u in blue_units) / max(len(blue_units), 1), 3
+                sum(_strength(u) for u in blue_units) / max(len(blue_units), 1), 3
             ),
             red_avg_strength=round(
-                sum(u.strength for u in red_units) / max(len(red_units), 1), 3
+                sum(_strength(u) for u in red_units) / max(len(red_units), 1), 3
             ),
             execution_time_ms=elapsed,
             reproducibility_level="STATISTICAL" if params.use_llm else "DETERMINISTIC",
@@ -305,6 +322,45 @@ class BatchRunner:
         if blue_str > red_str * 1.15:
             return "BLUE"
         if red_str > blue_str * 1.15:
+            return "RED"
+        return "DRAW"
+
+    def _determine_winner_generic(self, state) -> str:
+        """Determine winner for any domain state (military or business)."""
+        if not hasattr(state, "units"):
+            return "DRAW"
+        dead_statuses = ("DESTROYED", "ROUTED", "BANKRUPT")
+
+        def active(side_str: str) -> list:
+            return [
+                u for u in state.units.values()
+                if _unit_side(u) == side_str and _unit_status(u) not in dead_statuses
+            ]
+
+        def score(units) -> float:
+            total = 0.0
+            for u in units:
+                if hasattr(u, "market_share"):
+                    total += u.market_share
+                else:
+                    total += getattr(u, "strength", 0.0)
+            return total
+
+        blue_units = active("BLUE")
+        red_units = active("RED")
+
+        if not blue_units and not red_units:
+            return "DRAW"
+        if not blue_units:
+            return "RED"
+        if not red_units:
+            return "BLUE"
+
+        blue_score = score(blue_units)
+        red_score = score(red_units)
+        if blue_score > red_score * 1.15:
+            return "BLUE"
+        if red_score > blue_score * 1.15:
             return "RED"
         return "DRAW"
 

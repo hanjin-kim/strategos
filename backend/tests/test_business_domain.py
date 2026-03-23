@@ -16,6 +16,7 @@ from app.domains.business.engines import (
     BusinessConstraints, BusinessVictory,
 )
 from app.domains.business.factory import BusinessDomainFactory
+from app.domains.business.state import BusinessState
 
 
 # ---------------------------------------------------------------------------
@@ -59,8 +60,7 @@ def make_market_space() -> MarketSpace:
         "Europe:EV": ["USA:EV"],
         "Korea:ESS": ["Korea:EV"],
     }
-    terrains: dict = {}
-    return MarketSpace(connections, terrains)
+    return MarketSpace(connections)
 
 
 @pytest.fixture(autouse=True)
@@ -220,7 +220,7 @@ def test_market_space_distance_invalid_type_returns_inf():
 
 def test_market_space_is_passable_no_terrain():
     space = make_market_space()
-    # No terrain registered — defaults to True
+    # No market_data registered — defaults to True (entry_barrier=0 < 0.95)
     assert space.is_passable(MarketNode(region="Korea", segment="EV")) is True
 
 
@@ -262,7 +262,6 @@ def test_resolver_resolve_empty_actors_returns_none_outcome():
 
 def test_resolver_stronger_attacker_can_gain_share():
     """With high competitive_power and seed chosen to trigger gain."""
-    resolver = MarketCompetitionResolver(rng_seed=0)
     attacker = BusinessUnit(
         id="att", name="Attacker", side="BLUE", status="ACTIVE",
         position=make_market_node(),
@@ -277,7 +276,6 @@ def test_resolver_stronger_attacker_can_gain_share():
         brand_loyalty=3.0, marketing_budget=0.3, cash_reserves=0.5,
         org_health=0.7, rd_capability=0.4,
     )
-    # Run multiple times and expect at least one gain
     gained = False
     for seed in range(10):
         r = MarketCompetitionResolver(rng_seed=seed)
@@ -309,9 +307,8 @@ def test_resolver_satisfies_interaction_resolver_protocol():
 # ---------------------------------------------------------------------------
 
 def test_mover_execute_moves_expand_action():
-    from app.engine.game_state import GameState
     scenario = load_scenario()
-    state = GameState(scenario)
+    state = BusinessState(scenario)
     state.advance_turn()
 
     action = BusinessAction(
@@ -328,9 +325,8 @@ def test_mover_execute_moves_expand_action():
 
 
 def test_mover_execute_moves_non_expand_ignored():
-    from app.engine.game_state import GameState
     scenario = load_scenario()
-    state = GameState(scenario)
+    state = BusinessState(scenario)
     state.advance_turn()
 
     action = BusinessAction(
@@ -343,9 +339,8 @@ def test_mover_execute_moves_non_expand_ignored():
 
 
 def test_mover_execute_moves_empty_list():
-    from app.engine.game_state import GameState
     scenario = load_scenario()
-    state = GameState(scenario)
+    state = BusinessState(scenario)
     mover = BusinessMover()
     assert mover.execute_moves([], state) == []
 
@@ -360,9 +355,8 @@ def test_mover_satisfies_mover_engine_protocol():
 # ---------------------------------------------------------------------------
 
 def test_constraints_validate_active_unit_passes():
-    from app.engine.game_state import GameState
     scenario = load_scenario()
-    state = GameState(scenario)
+    state = BusinessState(scenario)
     state.advance_turn()
 
     action = BusinessAction(
@@ -376,9 +370,8 @@ def test_constraints_validate_active_unit_passes():
 
 
 def test_constraints_validate_missing_unit_rejected():
-    from app.engine.game_state import GameState
     scenario = load_scenario()
-    state = GameState(scenario)
+    state = BusinessState(scenario)
 
     action = BusinessAction(
         action_id="c2", turn=1, commander_id="cmd1",
@@ -400,22 +393,18 @@ def test_constraints_satisfies_domain_constraints_protocol():
 # ---------------------------------------------------------------------------
 
 def test_victory_false_when_both_sides_active():
-    from app.engine.game_state import GameState
     scenario = load_scenario()
-    state = GameState(scenario)
+    state = BusinessState(scenario)
     victory = BusinessVictory()
     assert victory.check(state) is False
 
 
-def test_victory_true_when_one_side_all_destroyed():
-    from app.engine.game_state import GameState
-    from app.models.domain import UnitStatus, Side
+def test_victory_true_when_one_side_all_bankrupt():
     scenario = load_scenario()
-    state = GameState(scenario)
-    # Destroy all BLUE units
+    state = BusinessState(scenario)
     for uid, unit in list(state.units.items()):
-        if unit.side == Side.BLUE:
-            state.update_unit(uid, status=UnitStatus.DESTROYED)
+        if unit.side == "BLUE":
+            state.update_unit(uid, status="BANKRUPT")
     victory = BusinessVictory()
     assert victory.check(state) is True
 
@@ -438,12 +427,11 @@ def test_victory_satisfies_victory_checker_protocol():
 # 9. BusinessDomainFactory
 # ---------------------------------------------------------------------------
 
-def test_factory_create_state_returns_game_state():
-    from app.engine.game_state import GameState
+def test_factory_create_state_returns_business_state():
     scenario = load_scenario()
     factory = BusinessDomainFactory()
     state = factory.create_state(scenario)
-    assert isinstance(state, GameState)
+    assert isinstance(state, BusinessState)
 
 
 def test_factory_create_state_loads_units():
@@ -465,10 +453,8 @@ def test_factory_create_engines_has_required_keys():
     factory = BusinessDomainFactory()
     engines = factory.create_engines(scenario)
     expected = [
-        "game_state", "space", "interaction_resolver", "mover",
+        "space", "interaction_resolver", "mover",
         "constraints", "victory_checker", "command_orchestrator",
-        "combat_resolver", "movement_engine", "constraint_engine",
-        "intel_engine", "supply_engine", "air_engine", "relationship_graph",
     ]
     for key in expected:
         assert key in engines, f"Missing engine key: {key}"
