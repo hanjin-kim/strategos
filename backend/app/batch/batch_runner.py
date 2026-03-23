@@ -114,6 +114,11 @@ class BatchRunner:
         # Apply parameters to scenario (creates a deep copy)
         modified_scenario = apply_to_scenario(self.scenario_data, params)
 
+        # Route non-military domains to TurnLoop
+        domain = modified_scenario.get("domain", "military")
+        if domain != "military":
+            return self._execute_domain_run(run_index, params, domain, modified_scenario)
+
         # Create fresh GameState
         game_state = GameState(modified_scenario)
 
@@ -185,6 +190,73 @@ class BatchRunner:
             blue_avg_strength=round(sum(u.strength for u in blue_units) / max(len(blue_units), 1), 3),
             red_avg_strength=round(sum(u.strength for u in red_units) / max(len(red_units), 1), 3),
             execution_time_ms=elapsed_ms,
+            reproducibility_level="STATISTICAL" if params.use_llm else "DETERMINISTIC",
+        )
+
+    def _execute_domain_run(
+        self, run_index: int, params: ParameterSet, domain: str, modified_scenario: dict
+    ) -> RunResult:
+        """Execute a run using the domain-agnostic TurnLoop."""
+        import time as _time
+        from app.core.domain_registry import get as get_domain
+        from app.core.turn_loop import TurnLoop
+
+        run_start = _time.time()
+        # Auto-import domain module to trigger registration side-effect if needed
+        from app.core.domain_registry import list_domains
+        if domain not in list_domains():
+            try:
+                import importlib
+                mod = importlib.import_module(f"app.domains.{domain}")
+                importlib.reload(mod)
+            except ImportError:
+                pass
+        factory = get_domain(domain)
+        params_dict = params.model_dump() if hasattr(params, "model_dump") else {}
+        state = factory.create_state(modified_scenario)
+        engines = factory.create_engines(modified_scenario, params_dict)
+        agents = factory.create_agents(modified_scenario, params_dict)
+
+        loop = TurnLoop(
+            state=state,
+            command_orchestrator=engines.get("command_orchestrator"),
+            mover=engines.get("mover"),
+            interaction_resolver=engines.get("interaction_resolver"),
+            constraints=engines.get("constraints"),
+            victory_checker=engines.get("victory_checker"),
+            agents=agents,
+        )
+
+        result = loop.run_simulation(max_turns=params.max_turns)
+        elapsed = int((_time.time() - run_start) * 1000)
+
+        winner = self._determine_winner(state)
+
+        from app.models.domain import UnitStatus
+        blue_units = [
+            u for u in state.units.values()
+            if u.side == Side.BLUE and u.status not in (UnitStatus.DESTROYED, UnitStatus.ROUTED)
+        ] if hasattr(state, "units") else []
+        red_units = [
+            u for u in state.units.values()
+            if u.side == Side.RED and u.status not in (UnitStatus.DESTROYED, UnitStatus.ROUTED)
+        ] if hasattr(state, "units") else []
+
+        return RunResult(
+            run_index=run_index,
+            parameter_set_name=params.name,
+            rng_seed=params.rng_seed,
+            winner=winner,
+            total_turns=result.get("total_turns", 0),
+            blue_units_remaining=len(blue_units),
+            red_units_remaining=len(red_units),
+            blue_avg_strength=round(
+                sum(u.strength for u in blue_units) / max(len(blue_units), 1), 3
+            ),
+            red_avg_strength=round(
+                sum(u.strength for u in red_units) / max(len(red_units), 1), 3
+            ),
+            execution_time_ms=elapsed,
             reproducibility_level="STATISTICAL" if params.use_llm else "DETERMINISTIC",
         )
 
