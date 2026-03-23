@@ -237,16 +237,16 @@ class TestClassifyOutcomes:
     def test_decisive_blue(self):
         engine = AnalysisEngine()
         runs = [make_run(winner="BLUE", total_turns=10)]  # < 72*0.5=36
-        result = engine.classify_outcomes(runs)
-        assert 0 in result["groups"]["decisive_blue"]
-        assert result["summary"]["decisive_blue"] == 1
+        result = engine.classify_outcomes(runs, side_a="BLUE", side_b="RED")
+        assert 0 in result["groups"]["decisive_a"]
+        assert result["summary"]["decisive_a"] == 1
 
     def test_decisive_red(self):
         engine = AnalysisEngine()
         runs = [make_run(winner="RED", total_turns=10)]
-        result = engine.classify_outcomes(runs)
-        assert 0 in result["groups"]["decisive_red"]
-        assert result["summary"]["decisive_red"] == 1
+        result = engine.classify_outcomes(runs, side_a="BLUE", side_b="RED")
+        assert 0 in result["groups"]["decisive_b"]
+        assert result["summary"]["decisive_b"] == 1
 
     def test_close_outcome(self):
         engine = AnalysisEngine()
@@ -268,9 +268,9 @@ class TestClassifyOutcomes:
             make_run(2, winner="DRAW", total_turns=72),
             make_run(3, winner="BLUE", total_turns=60),
         ]
-        result = engine.classify_outcomes(runs)
-        assert result["summary"]["decisive_blue"] == 1
-        assert result["summary"]["decisive_red"] == 1
+        result = engine.classify_outcomes(runs, side_a="BLUE", side_b="RED")
+        assert result["summary"]["decisive_a"] == 1
+        assert result["summary"]["decisive_b"] == 1
         assert result["summary"]["stalemate"] == 1
         assert result["summary"]["close"] == 1
 

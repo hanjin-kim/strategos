@@ -90,32 +90,37 @@ class ReportGenerator:
         classification = analysis.get("classification", {})
         divergence = analysis.get("divergence_points", {})
 
-        # Executive summary
+        # Executive summary — use dynamic side names
         runs = analysis.get("runs_analyzed", 0)
-        blue_wr = win_rates.get("blue_win_rate", 0)
-        red_wr = win_rates.get("red_win_rate", 0)
+        sides = analysis.get("sides", {})
+        side_a = sides.get("side_a", win_rates.get("side_a", "Side A"))
+        side_b = sides.get("side_b", win_rates.get("side_b", "Side B"))
+        a_wr = win_rates.get("side_a_win_rate", win_rates.get("blue_win_rate", 0))
+        b_wr = win_rates.get("side_b_win_rate", win_rates.get("red_win_rate", 0))
 
-        if blue_wr > 0.6:
-            outlook = "BLUE forces hold a significant advantage"
-        elif red_wr > 0.6:
-            outlook = "RED forces hold a significant advantage"
+        if a_wr > 0.6:
+            outlook = f"{side_a} holds a significant advantage"
+        elif b_wr > 0.6:
+            outlook = f"{side_b} holds a significant advantage"
         else:
             outlook = "The outcome is contested with no clear favorite"
 
         exec_summary = (
             f"Analysis of {runs} simulation runs: {outlook}. "
-            f"BLUE win rate: {blue_wr:.1%}, RED win rate: {red_wr:.1%}. "
+            f"{side_a} win rate: {a_wr:.1%}, {side_b} win rate: {b_wr:.1%}. "
             f"Average game duration: {duration.get('turns', {}).get('mean', 0):.0f} turns."
         )
 
         # Strategy comparison
         by_param = sensitivity.get("by_parameter", {})
         if by_param:
-            best_blue = max(by_param, key=lambda k: by_param[k].get("blue_win_rate", 0))
-            best_red = max(by_param, key=lambda k: by_param[k].get("red_win_rate", 0))
+            best_a = max(by_param, key=lambda k: by_param[k].get("side_a_win_rate", by_param[k].get("blue_win_rate", 0)))
+            best_b = max(by_param, key=lambda k: by_param[k].get("side_b_win_rate", by_param[k].get("red_win_rate", 0)))
+            a_rate = by_param[best_a].get("side_a_win_rate", by_param[best_a].get("blue_win_rate", 0))
+            b_rate = by_param[best_b].get("side_b_win_rate", by_param[best_b].get("red_win_rate", 0))
             strategy_comp = (
-                f"Best BLUE strategy: '{best_blue}' ({by_param[best_blue]['blue_win_rate']:.1%} win rate). "
-                f"Best RED strategy: '{best_red}' ({by_param[best_red]['red_win_rate']:.1%} win rate)."
+                f"Best {side_a} strategy: '{best_a}' ({a_rate:.1%} win rate). "
+                f"Best {side_b} strategy: '{best_b}' ({b_rate:.1%} win rate)."
             )
         else:
             strategy_comp = "Insufficient parameter variation for strategy comparison."
@@ -125,9 +130,9 @@ class ReportGenerator:
         red_str = casualties.get("red_avg_strength", {})
         risk_items = []
         if blue_str.get("min", 1) < 0.3:
-            risk_items.append("BLUE forces risk near-total attrition in worst-case scenarios")
+            risk_items.append(f"{side_a} risks near-total attrition in worst-case scenarios")
         if red_str.get("min", 1) < 0.3:
-            risk_items.append("RED forces risk near-total attrition in worst-case scenarios")
+            risk_items.append(f"{side_b} risks near-total attrition in worst-case scenarios")
         summary_groups = classification.get("summary", {})
         if summary_groups.get("stalemate", 0) > runs * 0.3:
             risk_items.append(f"High stalemate probability ({summary_groups['stalemate']}/{runs} runs)")

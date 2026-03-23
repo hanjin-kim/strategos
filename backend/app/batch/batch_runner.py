@@ -245,19 +245,21 @@ class BatchRunner:
         winner = self._determine_winner_generic(state)
 
         dead_statuses = ("DESTROYED", "ROUTED", "BANKRUPT")
-        blue_units = [
-            u for u in state.units.values()
-            if _unit_side(u) == "BLUE" and _unit_status(u) not in dead_statuses
-        ] if hasattr(state, "units") else []
-        red_units = [
-            u for u in state.units.values()
-            if _unit_side(u) == "RED" and _unit_status(u) not in dead_statuses
-        ] if hasattr(state, "units") else []
 
         def _strength(u) -> float:
             if hasattr(u, "market_share"):
                 return u.market_share
             return getattr(u, "strength", 0.0)
+
+        # Discover sides dynamically (works for BLUE/RED or Netflix/DisneyPlus)
+        sides_found: list[str] = []
+        if hasattr(state, "units"):
+            sides_found = sorted(set(_unit_side(u) for u in state.units.values()))
+        side_a = sides_found[0] if len(sides_found) > 0 else "BLUE"
+        side_b = sides_found[1] if len(sides_found) > 1 else "RED"
+
+        a_units = [u for u in state.units.values() if _unit_side(u) == side_a and _unit_status(u) not in dead_statuses] if hasattr(state, "units") else []
+        b_units = [u for u in state.units.values() if _unit_side(u) == side_b and _unit_status(u) not in dead_statuses] if hasattr(state, "units") else []
 
         return RunResult(
             run_index=run_index,
@@ -265,13 +267,13 @@ class BatchRunner:
             rng_seed=params.rng_seed,
             winner=winner,
             total_turns=result.get("total_turns", 0),
-            blue_units_remaining=len(blue_units),
-            red_units_remaining=len(red_units),
+            blue_units_remaining=len(a_units),
+            red_units_remaining=len(b_units),
             blue_avg_strength=round(
-                sum(_strength(u) for u in blue_units) / max(len(blue_units), 1), 3
+                sum(_strength(u) for u in a_units) / max(len(a_units), 1), 3
             ),
             red_avg_strength=round(
-                sum(_strength(u) for u in red_units) / max(len(red_units), 1), 3
+                sum(_strength(u) for u in b_units) / max(len(b_units), 1), 3
             ),
             execution_time_ms=elapsed,
             reproducibility_level="STATISTICAL" if params.use_llm else "DETERMINISTIC",
@@ -346,22 +348,28 @@ class BatchRunner:
                     total += getattr(u, "strength", 0.0)
             return total
 
-        blue_units = active("BLUE")
-        red_units = active("RED")
-
-        if not blue_units and not red_units:
+        # Discover sides dynamically
+        all_sides = sorted(set(_unit_side(u) for u in state.units.values()))
+        if len(all_sides) < 2:
             return "DRAW"
-        if not blue_units:
-            return "RED"
-        if not red_units:
-            return "BLUE"
 
-        blue_score = score(blue_units)
-        red_score = score(red_units)
-        if blue_score > red_score * 1.15:
-            return "BLUE"
-        if red_score > blue_score * 1.15:
-            return "RED"
+        side_a, side_b = all_sides[0], all_sides[1]
+        a_units = active(side_a)
+        b_units = active(side_b)
+
+        if not a_units and not b_units:
+            return "DRAW"
+        if not a_units:
+            return side_b
+        if not b_units:
+            return side_a
+
+        a_score = score(a_units)
+        b_score = score(b_units)
+        if a_score > b_score * 1.15:
+            return side_a
+        if b_score > a_score * 1.15:
+            return side_b
         return "DRAW"
 
     def estimate_cost(self, parameter_sets: list[ParameterSet]) -> dict:

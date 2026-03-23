@@ -12,7 +12,12 @@ from app.batch.report_generator import ReportGenerator
 def _full_analysis(blue_wr=0.7, red_wr=0.2, runs=10):
     return {
         "runs_analyzed": runs,
+        "sides": {"side_a": "BLUE", "side_b": "RED"},
         "win_rates": {
+            "side_a": "BLUE",
+            "side_b": "RED",
+            "side_a_win_rate": blue_wr,
+            "side_b_win_rate": red_wr,
             "blue_win_rate": blue_wr,
             "red_win_rate": red_wr,
             "draw_rate": 1 - blue_wr - red_wr,
@@ -26,8 +31,8 @@ def _full_analysis(blue_wr=0.7, red_wr=0.2, runs=10):
         },
         "sensitivity": {
             "by_parameter": {
-                "aggressive": {"blue_win_rate": 0.8, "red_win_rate": 0.1},
-                "defensive": {"blue_win_rate": 0.5, "red_win_rate": 0.4},
+                "aggressive": {"side_a_win_rate": 0.8, "side_b_win_rate": 0.1, "blue_win_rate": 0.8, "red_win_rate": 0.1},
+                "defensive": {"side_a_win_rate": 0.5, "side_b_win_rate": 0.4, "blue_win_rate": 0.5, "red_win_rate": 0.4},
             },
             "most_decisive_parameter": "aggressive",
         },
@@ -102,13 +107,13 @@ class TestTemplateReport:
     def test_blue_advantage_scenario(self):
         rg = ReportGenerator()
         report = rg._template_report(_full_analysis(blue_wr=0.8, red_wr=0.1))
-        assert "BLUE forces hold a significant advantage" in report["executive_summary"]
+        assert "BLUE holds a significant advantage" in report["executive_summary"]
 
     def test_red_advantage_scenario(self):
         rg = ReportGenerator()
         analysis = _full_analysis(blue_wr=0.1, red_wr=0.8)
         report = rg._template_report(analysis)
-        assert "RED forces hold a significant advantage" in report["executive_summary"]
+        assert "RED holds a significant advantage" in report["executive_summary"]
 
     def test_contested_scenario(self):
         rg = ReportGenerator()
