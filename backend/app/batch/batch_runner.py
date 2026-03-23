@@ -54,9 +54,10 @@ class BatchResult(BaseModel):
 class BatchRunner:
     """Runs N simulations with parameter variations sequentially."""
 
-    def __init__(self, scenario_data: dict, scenario_name: str = ""):
+    def __init__(self, scenario_data: dict, scenario_name: str = "", doctrine_override: str | None = None):
         self.scenario_data = scenario_data
         self.scenario_name = scenario_name
+        self.doctrine_override = doctrine_override
 
     def run_batch(
         self,
@@ -140,7 +141,7 @@ class BatchRunner:
                 "model": settings.LLM_MODEL_NAME,
             }
 
-        agents = self._create_agents(game_state, llm_config, graph_tools)
+        agents = self._create_agents(game_state, llm_config, graph_tools, params)
 
         # Create TurnManager with all engines
         turn_manager = TurnManager(
@@ -187,16 +188,19 @@ class BatchRunner:
             reproducibility_level="STATISTICAL" if params.use_llm else "DETERMINISTIC",
         )
 
-    def _create_agents(self, game_state: GameState, llm_config: dict, graph_tools: GraphTools) -> dict:
+    def _create_agents(self, game_state: GameState, llm_config: dict, graph_tools: GraphTools, params: ParameterSet | None = None) -> dict:
         """Create agents for a simulation run."""
         agents = {}
         for cmd_id, commander in game_state.commanders.items():
+            kwargs: dict = {"graph_tools": graph_tools}
+            if self.doctrine_override:
+                kwargs["doctrine_override"] = self.doctrine_override
             if commander.rank == "Theater":
-                agent = TheaterCommander(commander, llm_config, graph_tools=graph_tools)
+                agent = TheaterCommander(commander, llm_config, **kwargs)
             elif commander.rank == "Division":
-                agent = DivisionCommander(commander, llm_config, graph_tools=graph_tools)
+                agent = DivisionCommander(commander, llm_config, **kwargs)
             else:  # Battalion
-                agent = BattalionCommander(commander, llm_config, graph_tools=graph_tools)
+                agent = BattalionCommander(commander, llm_config, **kwargs)
             agents[cmd_id] = agent
         return agents
 
@@ -226,9 +230,9 @@ class BatchRunner:
             u.strength for u in game_state.units.values()
             if u.side == Side.RED and u.status not in (UnitStatus.DESTROYED, UnitStatus.ROUTED)
         )
-        if blue_str > red_str * 1.5:
+        if blue_str > red_str * 1.15:
             return "BLUE"
-        if red_str > blue_str * 1.5:
+        if red_str > blue_str * 1.15:
             return "RED"
         return "DRAW"
 

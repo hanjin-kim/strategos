@@ -33,6 +33,7 @@ class BaseCommander:
         graph_tools: GraphTools | None = None,
         memory_window: int = 10,
         intel_engine=None,
+        doctrine_override: str | None = None,
     ):
         self.commander = commander
         self.memory = RollingMemory(window=memory_window)
@@ -42,6 +43,7 @@ class BaseCommander:
         self._consecutive_failures = 0
         self._fallback_mode = False
         self._cached_system_prompt: str | None = None
+        self._doctrine_override = doctrine_override
         self._client = None
         self._model = llm_config.get("model", "qwen-plus")
         self._temperature = llm_config.get("temperature", 0.0)
@@ -229,8 +231,9 @@ class BaseCommander:
         """Build system prompt from L1 (doctrine) + L2 (scenario). Called once at first use, then cached."""
         if self._cached_system_prompt is not None:
             return self._cached_system_prompt
+        doctrine = self._doctrine_override if self._doctrine_override is not None else DOCTRINE_PROMPT
         persona = self._build_persona()
-        self._cached_system_prompt = DOCTRINE_PROMPT + "\n" + persona
+        self._cached_system_prompt = doctrine + "\n" + persona
         return self._cached_system_prompt
 
     def invalidate_cache(self) -> None:

@@ -1,0 +1,1003 @@
+{
+  "name": "2027 Korean EV Battery Market",
+  "description": "Business competition simulation: LG Energy Solution Alliance vs CATL Alliance in the global EV battery market",
+  "config": {
+    "max_turns": 36,
+    "hex_scale_km": 1,
+    "enemy_strength_threshold": 0.3
+  },
+  "map": {
+    "width": 7,
+    "height": 6,
+    "hexes": [
+      {
+        "q": 0,
+        "r": 0,
+        "terrain": "URBAN",
+        "elevation": 0,
+        "movement_cost": 2,
+        "defense_modifier": 2.0,
+        "name": "Korea-EV"
+      },
+      {
+        "q": 1,
+        "r": 0,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 2,
+        "r": 0,
+        "terrain": "URBAN",
+        "elevation": 0,
+        "movement_cost": 2,
+        "defense_modifier": 2.0,
+        "name": "China-EV"
+      },
+      {
+        "q": 3,
+        "r": 0,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 4,
+        "r": 0,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": "USA-EV"
+      },
+      {
+        "q": 5,
+        "r": 0,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 6,
+        "r": 0,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": "Europe-EV"
+      },
+      {
+        "q": 0,
+        "r": 1,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 1,
+        "r": 1,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 2,
+        "r": 1,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 3,
+        "r": 1,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 4,
+        "r": 1,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 5,
+        "r": 1,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 6,
+        "r": 1,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 0,
+        "r": 2,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": "Korea-ESS"
+      },
+      {
+        "q": 1,
+        "r": 2,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 2,
+        "r": 2,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": "China-ESS"
+      },
+      {
+        "q": 3,
+        "r": 2,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 4,
+        "r": 2,
+        "terrain": "FOREST",
+        "elevation": 0,
+        "movement_cost": 2,
+        "defense_modifier": 1.3,
+        "name": "USA-ESS"
+      },
+      {
+        "q": 5,
+        "r": 2,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 6,
+        "r": 2,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 0,
+        "r": 3,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 1,
+        "r": 3,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 2,
+        "r": 3,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 3,
+        "r": 3,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 4,
+        "r": 3,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 5,
+        "r": 3,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 6,
+        "r": 3,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 0,
+        "r": 4,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": "Korea-SmallBat"
+      },
+      {
+        "q": 1,
+        "r": 4,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 2,
+        "r": 4,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 3,
+        "r": 4,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 4,
+        "r": 4,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 5,
+        "r": 4,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 6,
+        "r": 4,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 0,
+        "r": 5,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 1,
+        "r": 5,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 2,
+        "r": 5,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 3,
+        "r": 5,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 4,
+        "r": 5,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 5,
+        "r": 5,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      },
+      {
+        "q": 6,
+        "r": 5,
+        "terrain": "PLAIN",
+        "elevation": 0,
+        "movement_cost": 1,
+        "defense_modifier": 1.0,
+        "name": null
+      }
+    ]
+  },
+  "forces": {
+    "BLUE": {
+      "name": "LG Energy Solution Alliance",
+      "units": [
+        {
+          "id": "blue_hq",
+          "name": "LGES Corporate HQ",
+          "type": "HQ",
+          "size": "DIVISION",
+          "position": {
+            "q": 0,
+            "r": 1
+          },
+          "strength": 1.0,
+          "morale": 0.9,
+          "max_movement_points": 2,
+          "attack_power": 5.0,
+          "defense_power": 10.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "blue_ev_korea",
+          "name": "LGES Korea-EV Division",
+          "type": "MECHANIZED",
+          "size": "BATTALION",
+          "position": {
+            "q": 1,
+            "r": 0
+          },
+          "strength": 0.85,
+          "morale": 0.9,
+          "max_movement_points": 3,
+          "attack_power": 18.0,
+          "defense_power": 16.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "blue_ev_usa",
+          "name": "LGES USA-EV Division",
+          "type": "MECHANIZED",
+          "size": "BATTALION",
+          "position": {
+            "q": 4,
+            "r": 0
+          },
+          "strength": 0.6,
+          "morale": 0.8,
+          "max_movement_points": 3,
+          "attack_power": 15.0,
+          "defense_power": 12.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "blue_ess",
+          "name": "LGES ESS Division",
+          "type": "INFANTRY",
+          "size": "BATTALION",
+          "position": {
+            "q": 1,
+            "r": 2
+          },
+          "strength": 0.5,
+          "morale": 0.75,
+          "max_movement_points": 2,
+          "attack_power": 12.0,
+          "defense_power": 14.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "blue_rd",
+          "name": "LGES R&D Center",
+          "type": "ENGINEER",
+          "size": "BATTALION",
+          "position": {
+            "q": 1,
+            "r": 1
+          },
+          "strength": 0.8,
+          "morale": 0.9,
+          "max_movement_points": 2,
+          "attack_power": 8.0,
+          "defense_power": 5.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "blue_marketing",
+          "name": "LGES Market Intelligence",
+          "type": "RECON",
+          "size": "BATTALION",
+          "position": {
+            "q": 2,
+            "r": 0
+          },
+          "strength": 0.7,
+          "morale": 0.85,
+          "max_movement_points": 4,
+          "attack_power": 5.0,
+          "defense_power": 3.0,
+          "effective_range": 2,
+          "ammo": 1.0,
+          "fuel": 1.0
+        }
+      ],
+      "commanders": [
+        {
+          "id": "blue_ceo",
+          "name": "CEO Kim",
+          "rank": "Theater",
+          "unit_id": "blue_hq",
+          "personality_traits": {
+            "aggression": 0.4,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "blue_vp",
+          "name": "VP Park",
+          "rank": "Division",
+          "unit_id": "blue_hq",
+          "personality_traits": {
+            "aggression": 0.5,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "blue_ev_korea_head",
+          "name": "Korea EV Head",
+          "rank": "Battalion",
+          "unit_id": "blue_ev_korea",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "blue_ev_usa_head",
+          "name": "USA EV Head",
+          "rank": "Battalion",
+          "unit_id": "blue_ev_usa",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "blue_ess_head",
+          "name": "ESS Head",
+          "rank": "Battalion",
+          "unit_id": "blue_ess",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "blue_rd_head",
+          "name": "R&D Head",
+          "rank": "Battalion",
+          "unit_id": "blue_rd",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "blue_mkt_head",
+          "name": "Marketing Head",
+          "rank": "Battalion",
+          "unit_id": "blue_marketing",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        }
+      ],
+      "air_assets": {
+        "assets": [
+          {
+            "id": "blue_campaign_1",
+            "name": "Marketing Campaign Alpha",
+            "asset_type": "Campaign",
+            "missions_capable": [
+              "CAS",
+              "INTERDICTION"
+            ],
+            "sortie_count": 3,
+            "attack_power": 10.0,
+            "defense_against_sam": 0.5
+          },
+          {
+            "id": "blue_campaign_2",
+            "name": "Marketing Campaign Bravo",
+            "asset_type": "Campaign",
+            "missions_capable": [
+              "CAS",
+              "INTERDICTION"
+            ],
+            "sortie_count": 3,
+            "attack_power": 10.0,
+            "defense_against_sam": 0.5
+          }
+        ],
+        "total_sorties_per_turn": 3
+      }
+    },
+    "RED": {
+      "name": "CATL Alliance",
+      "units": [
+        {
+          "id": "red_hq",
+          "name": "CATL Corporate HQ",
+          "type": "HQ",
+          "size": "DIVISION",
+          "position": {
+            "q": 2,
+            "r": 1
+          },
+          "strength": 1.0,
+          "morale": 0.85,
+          "max_movement_points": 2,
+          "attack_power": 5.0,
+          "defense_power": 10.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "red_ev_china",
+          "name": "CATL China-EV Division",
+          "type": "ARMOR",
+          "size": "BATTALION",
+          "position": {
+            "q": 2,
+            "r": 0
+          },
+          "strength": 0.9,
+          "morale": 0.9,
+          "max_movement_points": 4,
+          "attack_power": 22.0,
+          "defense_power": 10.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "red_ev_europe",
+          "name": "CATL Europe-EV Division",
+          "type": "MECHANIZED",
+          "size": "BATTALION",
+          "position": {
+            "q": 5,
+            "r": 0
+          },
+          "strength": 0.5,
+          "morale": 0.8,
+          "max_movement_points": 3,
+          "attack_power": 15.0,
+          "defense_power": 10.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "red_ess",
+          "name": "CATL ESS Division",
+          "type": "INFANTRY",
+          "size": "BATTALION",
+          "position": {
+            "q": 2,
+            "r": 2
+          },
+          "strength": 0.6,
+          "morale": 0.8,
+          "max_movement_points": 2,
+          "attack_power": 14.0,
+          "defense_power": 12.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "red_supply_chain",
+          "name": "CATL Supply Chain",
+          "type": "ENGINEER",
+          "size": "BATTALION",
+          "position": {
+            "q": 1,
+            "r": 1
+          },
+          "strength": 0.85,
+          "morale": 0.85,
+          "max_movement_points": 2,
+          "attack_power": 10.0,
+          "defense_power": 8.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0
+        },
+        {
+          "id": "red_price_war",
+          "name": "CATL Price Offensive",
+          "type": "ARTILLERY",
+          "size": "BATTALION",
+          "position": {
+            "q": 3,
+            "r": 0
+          },
+          "strength": 0.8,
+          "morale": 0.85,
+          "max_movement_points": 1,
+          "attack_power": 20.0,
+          "defense_power": 5.0,
+          "effective_range": 3,
+          "ammo": 1.0,
+          "fuel": 1.0
+        }
+      ],
+      "commanders": [
+        {
+          "id": "red_ceo",
+          "name": "CEO Zeng",
+          "rank": "Theater",
+          "unit_id": "red_hq",
+          "personality_traits": {
+            "aggression": 0.7,
+            "caution": 0.3
+          }
+        },
+        {
+          "id": "red_vp",
+          "name": "VP Li",
+          "rank": "Division",
+          "unit_id": "red_hq",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "red_ev_china_head",
+          "name": "China EV Head",
+          "rank": "Battalion",
+          "unit_id": "red_ev_china",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "red_ev_europe_head",
+          "name": "Europe EV Head",
+          "rank": "Battalion",
+          "unit_id": "red_ev_europe",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "red_ess_head",
+          "name": "Red ESS Head",
+          "rank": "Battalion",
+          "unit_id": "red_ess",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "red_sc_head",
+          "name": "Supply Chain Head",
+          "rank": "Battalion",
+          "unit_id": "red_supply_chain",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "red_pw_head",
+          "name": "Price War Head",
+          "rank": "Battalion",
+          "unit_id": "red_price_war",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        }
+      ],
+      "air_assets": {
+        "assets": [
+          {
+            "id": "red_price_offensive_1",
+            "name": "Price Offensive Alpha",
+            "asset_type": "PriceOffensive",
+            "missions_capable": [
+              "CAS"
+            ],
+            "sortie_count": 2,
+            "attack_power": 12.0,
+            "defense_against_sam": 0.4
+          },
+          {
+            "id": "red_price_offensive_2",
+            "name": "Price Offensive Bravo",
+            "asset_type": "PriceOffensive",
+            "missions_capable": [
+              "CAS"
+            ],
+            "sortie_count": 2,
+            "attack_power": 12.0,
+            "defense_against_sam": 0.4
+          }
+        ],
+        "total_sorties_per_turn": 2
+      }
+    }
+  },
+  "relationships": [
+    {
+      "source": "blue_ceo",
+      "target": "blue_vp",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_ceo",
+      "target": "blue_hq",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_vp",
+      "target": "blue_ev_korea_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_vp",
+      "target": "blue_ev_usa_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_vp",
+      "target": "blue_ess_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_vp",
+      "target": "blue_rd_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_vp",
+      "target": "blue_mkt_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_hq",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_ev_korea",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_ev_usa",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_ess",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_rd",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_marketing",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_hq",
+      "target": "blue_ev_korea",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "blue_hq",
+      "target": "blue_ev_usa",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "blue_hq",
+      "target": "blue_ess",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "blue_hq",
+      "target": "blue_rd",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "blue_hq",
+      "target": "blue_marketing",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "red_ceo",
+      "target": "red_vp",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_ceo",
+      "target": "red_hq",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_vp",
+      "target": "red_ev_china_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_vp",
+      "target": "red_ev_europe_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_vp",
+      "target": "red_ess_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_vp",
+      "target": "red_sc_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_vp",
+      "target": "red_pw_head",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_hq",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_ev_china",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_ev_europe",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_ess",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_supply_chain",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_price_war",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_hq",
+      "target": "red_ev_china",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "red_hq",
+      "target": "red_ev_europe",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "red_hq",
+      "target": "red_ess",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "red_hq",
+      "target": "red_supply_chain",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "red_hq",
+      "target": "red_price_war",
+      "type": "SUPPLIES"
+    }
+  ]
+}

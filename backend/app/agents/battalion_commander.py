@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import random
 import logging
 from app.agents.base_commander import BaseCommander
 from app.agents.rule_based_fallback import RuleBasedFallback
@@ -14,6 +15,7 @@ class BattalionCommander(BaseCommander):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._fallback_ai = RuleBasedFallback()
+        self._fallback_rng = random.Random(hash(self.commander.id))
 
     def _build_persona(self) -> str:
         return (
@@ -37,7 +39,9 @@ class BattalionCommander(BaseCommander):
         # If in fallback mode, use rule-based AI
         if self._fallback_mode:
             actions = self._fallback_ai.decide(
-                self.commander.id, unit, game_state, self._current_orders
+                self.commander.id, unit, game_state, self._current_orders,
+                rng=self._fallback_rng,
+                personality_traits=self.commander.personality_traits or None,
             )
             self._update_memory(game_state.turn, {}, actions)
             return actions
@@ -63,7 +67,9 @@ class BattalionCommander(BaseCommander):
             logger.warning("Battalion %s entering permanent fallback mode", self.commander.id)
 
         actions = self._fallback_ai.decide(
-            self.commander.id, unit, game_state, self._current_orders
+            self.commander.id, unit, game_state, self._current_orders,
+            rng=self._fallback_rng,
+            personality_traits=self.commander.personality_traits or None,
         )
         self._update_memory(game_state.turn, {}, actions)
         return actions

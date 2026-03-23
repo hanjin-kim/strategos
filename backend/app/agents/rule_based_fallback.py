@@ -41,7 +41,7 @@ class RuleBasedFallback:
             if (
                 personality_traits is not None
                 and rng is not None
-                and personality_traits.get("aggression", 0.0) > 0.7
+                and personality_traits.get("aggression", 0.0) > 0.3
                 and rng.random() < personality_traits["aggression"]
             ):
                 return [self._make_action(commander_id, unit, ActionType.ATTACK,
