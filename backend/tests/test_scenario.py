@@ -28,20 +28,20 @@ def test_scenario_loads_without_error(scenario_data):
     assert gs is not None
 
 
-# 2. Correct unit counts: 5 BLUE, 5 RED
+# 2. Correct unit counts: 7 BLUE, 7 RED (Phase 2: +recon, +SAM/AAA per side)
 def test_unit_counts(state):
     blue_units = state.get_units_by_side(Side.BLUE)
     red_units = state.get_units_by_side(Side.RED)
-    assert len(blue_units) == 5
-    assert len(red_units) == 5
+    assert len(blue_units) == 7
+    assert len(red_units) == 7
 
 
-# 3. Correct commander counts: 5 BLUE, 5 RED
+# 3. Correct commander counts: 8 BLUE, 8 RED (Phase 2: +div cmd, +2 bn cmds per side)
 def test_commander_counts(state):
     blue_cmds = [c for c in state.commanders.values() if c.side == Side.BLUE]
     red_cmds = [c for c in state.commanders.values() if c.side == Side.RED]
-    assert len(blue_cmds) == 5
-    assert len(red_cmds) == 5
+    assert len(blue_cmds) == 8
+    assert len(red_cmds) == 8
 
 
 # 4. Correct terrain count: 180 hexes

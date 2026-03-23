@@ -1651,7 +1651,9 @@
             "blue_1mech_1bn",
             "blue_1mech_2bn",
             "blue_1armor_bn",
-            "blue_arty_bn"
+            "blue_arty_bn",
+            "blue_recon",
+            "blue_sam"
           ]
         },
         {
@@ -1725,6 +1727,46 @@
           "effective_range": 3,
           "parent_unit_id": "blue_combined_hq",
           "subordinate_ids": []
+        },
+        {
+          "id": "blue_recon",
+          "name": "Recon Company",
+          "type": "RECON",
+          "size": "BATTALION",
+          "position": {
+            "q": 1,
+            "r": 4
+          },
+          "strength": 1.0,
+          "morale": 0.9,
+          "max_movement_points": 4,
+          "attack_power": 5.0,
+          "defense_power": 3.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0,
+          "parent_unit_id": "blue_combined_hq",
+          "subordinate_ids": []
+        },
+        {
+          "id": "blue_sam",
+          "name": "Patriot SAM Battery",
+          "type": "SAM",
+          "size": "BATTALION",
+          "position": {
+            "q": 2,
+            "r": 9
+          },
+          "strength": 1.0,
+          "morale": 0.9,
+          "max_movement_points": 1,
+          "attack_power": 0.0,
+          "defense_power": 8.0,
+          "effective_range": 2,
+          "ammo": 1.0,
+          "fuel": 1.0,
+          "parent_unit_id": "blue_combined_hq",
+          "subordinate_ids": []
         }
       ],
       "commanders": [
@@ -1777,8 +1819,78 @@
             "aggression": 0.3,
             "caution": 0.7
           }
+        },
+        {
+          "id": "blue_div_cmd",
+          "name": "MG Park Sung-ho",
+          "rank": "Division",
+          "unit_id": "blue_combined_hq",
+          "personality_traits": {
+            "aggression": 0.5,
+            "caution": 0.5
+          }
+        },
+        {
+          "id": "blue_recon_cmd",
+          "name": "Maj. Yoon",
+          "rank": "Battalion",
+          "unit_id": "blue_recon",
+          "personality_traits": {
+            "aggression": 0.4,
+            "caution": 0.6
+          }
+        },
+        {
+          "id": "blue_sam_cmd",
+          "name": "Maj. Shin",
+          "rank": "Battalion",
+          "unit_id": "blue_sam",
+          "personality_traits": {
+            "aggression": 0.2,
+            "caution": 0.8
+          }
         }
-      ]
+      ],
+      "air_assets": {
+        "assets": [
+          {
+            "id": "blue_f16_1",
+            "name": "F-16 Flight Alpha",
+            "asset_type": "F-16",
+            "missions_capable": [
+              "CAS",
+              "INTERDICTION"
+            ],
+            "sortie_count": 2,
+            "attack_power": 15.0,
+            "defense_against_sam": 0.6
+          },
+          {
+            "id": "blue_f16_2",
+            "name": "F-16 Flight Bravo",
+            "asset_type": "F-16",
+            "missions_capable": [
+              "CAS",
+              "INTERDICTION"
+            ],
+            "sortie_count": 2,
+            "attack_power": 15.0,
+            "defense_against_sam": 0.6
+          },
+          {
+            "id": "blue_kf21_1",
+            "name": "KF-21 Flight",
+            "asset_type": "KF-21",
+            "missions_capable": [
+              "AIR_SUPERIORITY"
+            ],
+            "sortie_count": 1,
+            "attack_power": 12.0,
+            "defense_against_sam": 0.7
+          }
+        ],
+        "total_sorties_per_turn": 4
+      }
     },
     "RED": {
       "name": "DPRK Forces",
@@ -1803,7 +1915,9 @@
             "red_1inf_1bn",
             "red_1inf_2bn",
             "red_1armor_bn",
-            "red_arty_bn"
+            "red_arty_bn",
+            "red_recon",
+            "red_aaa"
           ]
         },
         {
@@ -1877,6 +1991,46 @@
           "effective_range": 3,
           "parent_unit_id": "red_combined_hq",
           "subordinate_ids": []
+        },
+        {
+          "id": "red_recon",
+          "name": "Recon Company",
+          "type": "RECON",
+          "size": "BATTALION",
+          "position": {
+            "q": 5,
+            "r": 1
+          },
+          "strength": 1.0,
+          "morale": 0.85,
+          "max_movement_points": 4,
+          "attack_power": 5.0,
+          "defense_power": 3.0,
+          "effective_range": 1,
+          "ammo": 1.0,
+          "fuel": 1.0,
+          "parent_unit_id": "red_combined_hq",
+          "subordinate_ids": []
+        },
+        {
+          "id": "red_aaa",
+          "name": "AAA Battalion",
+          "type": "AAA",
+          "size": "BATTALION",
+          "position": {
+            "q": 2,
+            "r": 1
+          },
+          "strength": 1.0,
+          "morale": 0.8,
+          "max_movement_points": 1,
+          "attack_power": 0.0,
+          "defense_power": 8.0,
+          "effective_range": 2,
+          "ammo": 1.0,
+          "fuel": 1.0,
+          "parent_unit_id": "red_combined_hq",
+          "subordinate_ids": []
         }
       ],
       "commanders": [
@@ -1929,34 +2083,158 @@
             "aggression": 0.4,
             "caution": 0.6
           }
+        },
+        {
+          "id": "red_div_cmd",
+          "name": "MG Kim Chol-su",
+          "rank": "Division",
+          "unit_id": "red_combined_hq",
+          "personality_traits": {
+            "aggression": 0.6,
+            "caution": 0.4
+          }
+        },
+        {
+          "id": "red_recon_cmd",
+          "name": "Lt.Col. Song",
+          "rank": "Battalion",
+          "unit_id": "red_recon",
+          "personality_traits": {
+            "aggression": 0.5,
+            "caution": 0.5
+          }
+        },
+        {
+          "id": "red_aaa_cmd",
+          "name": "Lt.Col. O",
+          "rank": "Battalion",
+          "unit_id": "red_aaa",
+          "personality_traits": {
+            "aggression": 0.2,
+            "caution": 0.8
+          }
         }
-      ]
+      ],
+      "air_assets": {
+        "assets": [
+          {
+            "id": "red_su25_1",
+            "name": "Su-25 Flight",
+            "asset_type": "Su-25",
+            "missions_capable": [
+              "CAS"
+            ],
+            "sortie_count": 2,
+            "attack_power": 12.0,
+            "defense_against_sam": 0.4
+          },
+          {
+            "id": "red_su25_2",
+            "name": "Su-25 Flight 2",
+            "asset_type": "Su-25",
+            "missions_capable": [
+              "CAS",
+              "INTERDICTION"
+            ],
+            "sortie_count": 2,
+            "attack_power": 12.0,
+            "defense_against_sam": 0.4
+          },
+          {
+            "id": "red_mig29_1",
+            "name": "MiG-29 Flight",
+            "asset_type": "MiG-29",
+            "missions_capable": [
+              "AIR_SUPERIORITY"
+            ],
+            "sortie_count": 1,
+            "attack_power": 10.0,
+            "defense_against_sam": 0.5
+          }
+        ],
+        "total_sorties_per_turn": 3
+      }
     }
   },
   "relationships": [
+    {
+      "source": "blue_theater_cmd",
+      "target": "blue_div_cmd",
+      "type": "COMMANDS"
+    },
     {
       "source": "blue_theater_cmd",
       "target": "blue_combined_hq",
       "type": "COMMANDS"
     },
     {
-      "source": "blue_theater_cmd",
+      "source": "blue_div_cmd",
       "target": "blue_1mech_1bn",
       "type": "COMMANDS"
     },
     {
-      "source": "blue_theater_cmd",
+      "source": "blue_div_cmd",
       "target": "blue_1mech_2bn",
       "type": "COMMANDS"
     },
     {
-      "source": "blue_theater_cmd",
+      "source": "blue_div_cmd",
       "target": "blue_1armor_bn",
       "type": "COMMANDS"
     },
     {
-      "source": "blue_theater_cmd",
+      "source": "blue_div_cmd",
       "target": "blue_arty_bn",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_div_cmd",
+      "target": "blue_recon",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "blue_div_cmd",
+      "target": "blue_sam",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_theater_cmd",
+      "target": "red_div_cmd",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_theater_cmd",
+      "target": "red_combined_hq",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_div_cmd",
+      "target": "red_1inf_1bn",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_div_cmd",
+      "target": "red_1inf_2bn",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_div_cmd",
+      "target": "red_1armor_bn",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_div_cmd",
+      "target": "red_arty_bn",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_div_cmd",
+      "target": "red_recon",
+      "type": "COMMANDS"
+    },
+    {
+      "source": "red_div_cmd",
+      "target": "red_aaa",
       "type": "COMMANDS"
     },
     {
@@ -2010,31 +2288,6 @@
       "type": "PASSES_THROUGH"
     },
     {
-      "source": "red_theater_cmd",
-      "target": "red_combined_hq",
-      "type": "COMMANDS"
-    },
-    {
-      "source": "red_theater_cmd",
-      "target": "red_1inf_1bn",
-      "type": "COMMANDS"
-    },
-    {
-      "source": "red_theater_cmd",
-      "target": "red_1inf_2bn",
-      "type": "COMMANDS"
-    },
-    {
-      "source": "red_theater_cmd",
-      "target": "red_1armor_bn",
-      "type": "COMMANDS"
-    },
-    {
-      "source": "red_theater_cmd",
-      "target": "red_arty_bn",
-      "type": "COMMANDS"
-    },
-    {
       "source": "red_combined_hq",
       "target": "RED",
       "type": "BELONGS_TO"
@@ -2077,6 +2330,46 @@
     {
       "source": "red_msr_1",
       "target": "red_arty_bn",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "blue_recon",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_sam",
+      "target": "BLUE",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_recon",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "red_aaa",
+      "target": "RED",
+      "type": "BELONGS_TO"
+    },
+    {
+      "source": "blue_msr_1",
+      "target": "blue_recon",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "blue_msr_1",
+      "target": "blue_sam",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "red_msr_1",
+      "target": "red_recon",
+      "type": "SUPPLIES"
+    },
+    {
+      "source": "red_msr_1",
+      "target": "red_aaa",
       "type": "SUPPLIES"
     }
   ],
