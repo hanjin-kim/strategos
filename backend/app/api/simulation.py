@@ -70,12 +70,54 @@ def create_simulation():
         return jsonify({"error": str(e)}), 404
 
     sim_id = str(uuid.uuid4())
-    game_state = GameState(scenario_data)
+    domain = scenario_data.get("domain", "military")
 
     settings = Settings()
     db_path = str(Path(settings.DB_PATH).parent / f"sim_{sim_id}.db")
     replay_store = ReplayStore(db_path)
     replay_store.create_simulation(scenario_name, scenario_data.get("config", {}))
+
+    if domain != "military":
+        # Business or other domain — use DomainRegistry + TurnLoop
+        from app.core.domain_registry import get as get_domain
+        try:
+            import app.domains.business  # noqa: F401 — ensure registered
+        except ImportError:
+            pass
+
+        factory = get_domain(domain)
+        state = factory.create_state(scenario_data)
+        engines = factory.create_engines(scenario_data, {"rng_seed": 42})
+        agents = factory.create_agents(scenario_data, {
+            "use_llm": bool(settings.LLM_API_KEY),
+            "doctrine_override": None,
+        })
+
+        from app.core.turn_loop import TurnLoop
+        turn_loop = TurnLoop(
+            state=state,
+            command_orchestrator=engines.get("command_orchestrator"),
+            mover=engines.get("mover"),
+            interaction_resolver=engines.get("interaction_resolver"),
+            constraints=engines.get("constraints"),
+            victory_checker=engines.get("victory_checker"),
+            agents=agents,
+        )
+
+        _simulations[sim_id] = {
+            "turn_loop": turn_loop,
+            "game_state": state,
+            "status": "created",
+            "thread": None,
+            "lock": threading.Lock(),
+            "scenario_name": scenario_name,
+            "domain": domain,
+            "max_turns": scenario_data.get("config", {}).get("max_turns", 72),
+        }
+        return jsonify({"simulation_id": sim_id, "status": "created", "domain": domain}), 201
+
+    # Military domain — existing code path
+    game_state = GameState(scenario_data)
 
     # Create relationship graph
     rel_graph = RelationshipGraph()
@@ -123,10 +165,11 @@ def create_simulation():
         "thread": None,
         "lock": threading.Lock(),
         "scenario_name": scenario_name,
+        "domain": "military",
         "max_turns": scenario_data.get("config", {}).get("max_turns", 72),
     }
 
-    return jsonify({"simulation_id": sim_id, "status": "created"}), 201
+    return jsonify({"simulation_id": sim_id, "status": "created", "domain": "military"}), 201
 
 
 @simulation_bp.route("/<sim_id>/start", methods=["POST"])
@@ -144,11 +187,17 @@ def start_simulation(sim_id: str):
     def run():
         sim["status"] = "running"
         try:
-            def on_turn(turn, state):
-                with sim["lock"]:
-                    sim["current_turn"] = turn
-            sim["turn_manager"].run_simulation(max_turns=max_turns, callback=on_turn)
-            sim["status"] = "completed"
+            if "turn_loop" in sim:
+                # Business/non-military domain
+                sim["turn_loop"].run_simulation(max_turns=max_turns)
+                sim["status"] = "completed"
+            else:
+                # Military domain
+                def on_turn(turn, state):
+                    with sim["lock"]:
+                        sim["current_turn"] = turn
+                sim["turn_manager"].run_simulation(max_turns=max_turns, callback=on_turn)
+                sim["status"] = "completed"
         except Exception as e:
             logger.error("Simulation %s failed: %s", sim_id, e)
             sim["status"] = "error"
@@ -188,24 +237,20 @@ def get_state(sim_id: str):
     if not sim:
         return jsonify({"error": "Simulation not found"}), 404
 
-    turn = request.args.get("turn", type=int)
     side = request.args.get("side")
-
-    if turn is not None:
-        snapshot = sim["turn_manager"].replay_store.load_snapshot(sim_id, turn)
-        if snapshot is None:
-            return jsonify({"error": f"No snapshot for turn {turn}"}), 404
-        return jsonify(snapshot)
 
     with sim["lock"]:
         game_state = sim["game_state"]
-        if side and sim["turn_manager"].intel_engine:
+
+        # Side-filtered view (military domain only, requires intel_engine)
+        turn_manager = sim.get("turn_manager")
+        if side and turn_manager and hasattr(turn_manager, "intel_engine") and turn_manager.intel_engine:
             from app.models.domain import Side as DomainSide
             try:
                 domain_side = DomainSide(side)
             except ValueError:
                 return jsonify({"error": f"Invalid side '{side}'"}), 400
-            filtered = sim["turn_manager"].intel_engine.filter_context_for_agent(
+            filtered = turn_manager.intel_engine.filter_context_for_agent(
                 game_state, type("obj", (), {"side": domain_side})()
             )
             state_data = game_state.to_snapshot()
@@ -215,6 +260,7 @@ def get_state(sim_id: str):
                 for e in filtered.get("known_enemy", [])
             ]
             return jsonify(state_data)
+
         return jsonify(game_state.to_snapshot())
 
 

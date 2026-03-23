@@ -20,6 +20,7 @@ def list_scenarios():
                     "name": f.stem,
                     "display_name": data.get("name", f.stem),
                     "description": data.get("description", ""),
+                    "domain": data.get("domain", "military"),
                 })
             except (json.JSONDecodeError, OSError):
                 continue
