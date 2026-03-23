@@ -2,6 +2,7 @@ from __future__ import annotations
 import random
 from app.models.domain import Unit, TerrainHex, TerrainType, UnitType
 from app.models.simulation import CombatResult, CombatOutcome
+from app.models.supply import SupplyLevel, SupplyStatus
 
 RATIO_CATEGORIES = ["1:3", "1:2", "1:1", "2:1", "3:1", "5:1"]
 CRT_MATRIX = [
@@ -80,6 +81,21 @@ def supply_modifier(unit: Unit) -> float:
     return 0.5 if unit.ammo < 0.3 else 1.0
 
 
+_SUPPLY_LEVEL_MODIFIER: dict[SupplyLevel, float] = {
+    SupplyLevel.FULL: 1.0,
+    SupplyLevel.REDUCED: 0.8,
+    SupplyLevel.CUT_OFF: 0.5,
+}
+
+
+def supply_status_modifier(unit: Unit, supply_status_map: dict[str, SupplyStatus]) -> float:
+    """Return combat modifier based on SupplyStatus when supply tracking is active."""
+    status = supply_status_map.get(unit.id)
+    if status is None:
+        return 1.0
+    return _SUPPLY_LEVEL_MODIFIER[status.level]
+
+
 def morale_modifier(unit: Unit) -> float:
     return 0.6 if unit.morale < 0.3 else 1.0
 
@@ -93,14 +109,17 @@ class CombatResolver:
         attackers: list[Unit],
         defenders: list[Unit],
         terrain: TerrainHex,
+        cas_modifier: float = 0.0,
+        supply_status_map: dict[str, SupplyStatus] | None = None,
     ) -> CombatOutcome:
-        atk_power = self._calculate_attack_power(attackers, terrain)
-        def_power = self._calculate_defense_power(defenders, terrain)
+        atk_power = self._calculate_attack_power(attackers, terrain, supply_status_map)
+        effective_attack = atk_power * (1.0 + cas_modifier)
+        def_power = self._calculate_defense_power(defenders, terrain, supply_status_map)
 
         if def_power <= 0:
             def_power = 0.01
 
-        force_ratio = atk_power / def_power
+        force_ratio = effective_attack / def_power
         ratio_cat = classify_force_ratio(force_ratio)
         die_roll = self.rng.randint(1, 6)
         result = CRT_TABLE[(ratio_cat, die_roll)]
@@ -120,21 +139,37 @@ class CombatResolver:
             narrative=self._generate_narrative(attackers, defenders, result, force_ratio),
         )
 
-    def _calculate_attack_power(self, attackers: list[Unit], terrain: TerrainHex) -> float:
+    def _calculate_attack_power(
+        self,
+        attackers: list[Unit],
+        terrain: TerrainHex,
+        supply_status_map: dict[str, SupplyStatus] | None = None,
+    ) -> float:
         total = 0.0
         for unit in attackers:
             power = unit.attack_power * unit.strength
-            power *= supply_modifier(unit)
+            if supply_status_map is not None:
+                power *= supply_status_modifier(unit, supply_status_map)
+            else:
+                power *= supply_modifier(unit)
             power *= morale_modifier(unit)
             power *= terrain_attack_modifier(terrain, unit.unit_type)
             total += power
         return total
 
-    def _calculate_defense_power(self, defenders: list[Unit], terrain: TerrainHex) -> float:
+    def _calculate_defense_power(
+        self,
+        defenders: list[Unit],
+        terrain: TerrainHex,
+        supply_status_map: dict[str, SupplyStatus] | None = None,
+    ) -> float:
         total = 0.0
         for unit in defenders:
             power = unit.defense_power * unit.strength
-            power *= supply_modifier(unit)
+            if supply_status_map is not None:
+                power *= supply_status_modifier(unit, supply_status_map)
+            else:
+                power *= supply_modifier(unit)
             power *= morale_modifier(unit)
             power *= terrain_defense_modifier(terrain, unit.unit_type)
             total += power

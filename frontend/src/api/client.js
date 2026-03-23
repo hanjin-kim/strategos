@@ -44,6 +44,11 @@ export async function stopSimulation(simId) {
   return data
 }
 
+export async function getSimulationNarrative(simId, turn) {
+  const { data } = await api.get(`/simulations/${simId}/narrative`, { params: { turn } })
+  return data
+}
+
 export function connectStream(simId, onUpdate) {
   const source = new EventSource(`/api/simulations/${simId}/stream`)
   source.onmessage = (event) => {

@@ -11,8 +11,12 @@ from app.engine.turn_manager import TurnManager
 from app.engine.constraint_engine import ConstraintEngine
 from app.engine.combat_resolver import CombatResolver
 from app.engine.movement_engine import MovementEngine
+from app.engine.intel_engine import IntelEngine
+from app.engine.supply_engine import SupplyEngine
+from app.engine.air_engine import AirEngine
 from app.agents.theater_commander import TheaterCommander
 from app.agents.battalion_commander import BattalionCommander
+from app.agents.adjudicator import Adjudicator
 from app.graph.relationship_graph import RelationshipGraph
 from app.graph.graph_tools import GraphTools
 from app.memory.replay_store import ReplayStore
@@ -87,6 +91,14 @@ def create_simulation():
     }
     agents = _create_agents(game_state, scenario_data, llm_config, graph_tools)
 
+    # Create Phase 2 engines
+    intel_engine = IntelEngine()
+    supply_engine = SupplyEngine()
+    air_engine = AirEngine()
+    adjudicator = None
+    if settings.LLM_API_KEY:
+        adjudicator = Adjudicator(llm_config)
+
     # Create turn manager
     turn_manager = TurnManager(
         game_state=game_state,
@@ -96,6 +108,10 @@ def create_simulation():
         movement_engine=MovementEngine(),
         replay_store=replay_store,
         relationship_graph=rel_graph,
+        intel_engine=intel_engine,
+        supply_engine=supply_engine,
+        air_engine=air_engine,
+        adjudicator=adjudicator,
         simulation_id=sim_id,
         log_dir=settings.LOG_DIR,
     )
@@ -167,22 +183,55 @@ def get_status(sim_id: str):
 
 @simulation_bp.route("/<sim_id>/state", methods=["GET"])
 def get_state(sim_id: str):
-    """Get current game state or state at specific turn."""
+    """Get current game state or state at specific turn. Optional ?side=BLUE|RED for filtered view."""
     sim = _simulations.get(sim_id)
     if not sim:
         return jsonify({"error": "Simulation not found"}), 404
 
     turn = request.args.get("turn", type=int)
+    side = request.args.get("side")
+
     if turn is not None:
-        # Load from replay store
         snapshot = sim["turn_manager"].replay_store.load_snapshot(sim_id, turn)
         if snapshot is None:
             return jsonify({"error": f"No snapshot for turn {turn}"}), 404
         return jsonify(snapshot)
 
-    # Return current state
     with sim["lock"]:
-        return jsonify(sim["game_state"].to_snapshot())
+        game_state = sim["game_state"]
+        if side and sim["turn_manager"].intel_engine:
+            from app.models.domain import Side as DomainSide
+            try:
+                domain_side = DomainSide(side)
+            except ValueError:
+                return jsonify({"error": f"Invalid side '{side}'"}), 400
+            filtered = sim["turn_manager"].intel_engine.filter_context_for_agent(
+                game_state, type("obj", (), {"side": domain_side})()
+            )
+            state_data = game_state.to_snapshot()
+            state_data["view_side"] = side
+            state_data["filtered_enemy"] = [
+                e if isinstance(e, dict) else e.model_dump()
+                for e in filtered.get("known_enemy", [])
+            ]
+            return jsonify(state_data)
+        return jsonify(game_state.to_snapshot())
+
+
+@simulation_bp.route("/<sim_id>/narrative", methods=["GET"])
+def get_narrative(sim_id: str):
+    """Get narrative for a specific turn."""
+    sim = _simulations.get(sim_id)
+    if not sim:
+        return jsonify({"error": "Simulation not found"}), 404
+
+    turn = request.args.get("turn", type=int)
+    replay_store = sim["turn_manager"].replay_store
+    if replay_store and turn is not None:
+        narrative_raw = replay_store.get_narrative(sim_id, turn)
+        if narrative_raw:
+            return jsonify(json.loads(narrative_raw))
+    return jsonify({"summary": "", "combat_reports": [], "key_events": []})
 
 
 @simulation_bp.route("/<sim_id>/log", methods=["GET"])

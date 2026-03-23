@@ -47,3 +47,4 @@ class TurnResult(BaseModel):
     combats: list[CombatOutcome] = []
     destroyed_units: list[str] = []
     state_snapshot_path: str | None = None
+    narrative: str = ""

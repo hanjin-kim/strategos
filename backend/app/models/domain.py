@@ -33,6 +33,9 @@ class UnitType(str, Enum):
     AIR_DEFENSE = "AIR_DEFENSE"
     ENGINEER = "ENGINEER"
     HQ = "HQ"
+    RECON = "RECON"
+    SAM = "SAM"
+    AAA = "AAA"
 
 
 class UnitSize(str, Enum):

@@ -23,10 +23,12 @@ class BaseCommander:
         llm_config: dict,  # {"api_key", "base_url", "model", "temperature"}
         graph_tools: GraphTools | None = None,
         memory_window: int = 10,
+        intel_engine=None,
     ):
         self.commander = commander
         self.memory = RollingMemory(window=memory_window)
         self.graph_tools = graph_tools
+        self._intel_engine = intel_engine
         self._current_orders: OrderDirective | None = None
         self._consecutive_failures = 0
         self._fallback_mode = False
@@ -52,11 +54,15 @@ class BaseCommander:
         return self._current_orders
 
     def _apply_fog_of_war(self, game_state) -> dict:
-        """Phase 1 simplified fog: own units + enemies within 2 hexes of any own unit."""
+        """Fog of war: use IntelEngine if available, otherwise Phase 1 simplified 2-hex fog."""
+        # Phase 2: IntelEngine-based fog
+        if self._intel_engine:
+            return self._intel_engine.filter_context_for_agent(game_state, self.commander)
+
+        # Phase 1 fallback: own units + enemies within 2 hexes of any own unit
         my_side = self.commander.side
         own_units = game_state.get_units_by_side(my_side)
 
-        # Collect hexes visible to our units (within 2 hex radius)
         visible_hexes = set()
         for unit in own_units:
             visible_hexes.add(unit.position)

@@ -29,7 +29,7 @@ class RelationType(str, Enum):
 
 # Source/target type constraints for each relation
 RELATION_CONSTRAINTS: dict[RelationType, tuple[set[EntityType], set[EntityType]]] = {
-    RelationType.COMMANDS: ({EntityType.COMMANDER}, {EntityType.UNIT}),
+    RelationType.COMMANDS: ({EntityType.COMMANDER}, {EntityType.UNIT, EntityType.COMMANDER}),
     RelationType.BELONGS_TO: ({EntityType.UNIT}, {EntityType.FORCE}),
     RelationType.EQUIPPED_WITH: ({EntityType.UNIT}, {EntityType.WEAPON_SYSTEM}),
     RelationType.LOCATED_AT: ({EntityType.UNIT}, {EntityType.TERRAIN_FEATURE}),

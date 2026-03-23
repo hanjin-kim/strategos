@@ -11,6 +11,9 @@ UNIT_TYPE_SYMBOLS: dict[UnitType, str] = {
     UnitType.AIR_DEFENSE: "air_defense",
     UnitType.ENGINEER: "engineer",
     UnitType.HQ: "headquarters",
+    UnitType.RECON: "reconnaissance",
+    UnitType.SAM: "sam",
+    UnitType.AAA: "anti_aircraft",
 }
 
 SIZE_INDICATORS: dict[UnitSize, str] = {

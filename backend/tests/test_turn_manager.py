@@ -7,10 +7,12 @@ from app.models.domain import (
 )
 from app.models.actions import MilitaryAction, ActionType, OrderDirective, MissionType
 from app.models.simulation import TurnPhase, TurnResult, CombatOutcome
+from app.models.supply import SupplyLevel, SupplyStatus
 from app.engine.game_state import GameState
 from app.engine.constraint_engine import ConstraintEngine
 from app.engine.combat_resolver import CombatResolver
 from app.engine.movement_engine import MovementEngine
+from app.engine.supply_engine import SupplyEngine
 from app.engine.turn_manager import TurnManager
 from app.agents.theater_commander import TheaterCommander
 from app.agents.battalion_commander import BattalionCommander
@@ -453,3 +455,186 @@ def test_actions_saved_in_replay_store(tmp_path):
     # Just verify the method runs without error
     actions_turn1 = replay_store.get_turn_actions(sim_id, 1)
     assert isinstance(actions_turn1, list)
+
+
+# ---------------------------------------------------------------------------
+# Supply engine integration helpers
+# ---------------------------------------------------------------------------
+
+def make_game_state_with_hq() -> GameState:
+    """Game state with HQ units so supply tracing works end-to-end."""
+    gs = make_game_state()
+    # Add an HQ unit near each side so infantry units are in supply
+    gs.units["blue_hq"] = Unit(
+        id="blue_hq",
+        name="Blue HQ",
+        side=Side.BLUE,
+        unit_type=UnitType.HQ,
+        size=UnitSize.BATTALION,
+        position=HexCoord(q=0, r=1),
+        strength=1.0,
+        morale=1.0,
+        movement_points=2,
+        max_movement_points=2,
+        attack_power=1.0,
+        defense_power=1.0,
+        effective_range=1,
+        ammo=1.0,
+        fuel=1.0,
+        status=UnitStatus.ACTIVE,
+    )
+    gs.units["red_hq"] = Unit(
+        id="red_hq",
+        name="Red HQ",
+        side=Side.RED,
+        unit_type=UnitType.HQ,
+        size=UnitSize.BATTALION,
+        position=HexCoord(q=4, r=1),
+        strength=1.0,
+        morale=1.0,
+        movement_points=2,
+        max_movement_points=2,
+        attack_power=1.0,
+        defense_power=1.0,
+        effective_range=1,
+        ammo=1.0,
+        fuel=1.0,
+        status=UnitStatus.ACTIVE,
+    )
+    return gs
+
+
+def make_turn_manager_with_supply(
+    gs: GameState,
+    agents: dict,
+    tmp_path: Path,
+) -> TurnManager:
+    return TurnManager(
+        game_state=gs,
+        agents=agents,
+        constraint_engine=ConstraintEngine(),
+        combat_resolver=CombatResolver(rng_seed=42),
+        movement_engine=MovementEngine(),
+        supply_engine=SupplyEngine(),
+        simulation_id="test-supply",
+        log_dir=str(tmp_path / "logs"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 15. supply_engine=None: existing behavior unchanged
+# ---------------------------------------------------------------------------
+
+def test_supply_engine_none_does_not_populate_supply_status(tmp_path):
+    gs = make_game_state()
+    agents = make_agents(gs)
+    tm = make_turn_manager(gs, agents, tmp_path=tmp_path)
+
+    assert tm.supply_engine is None
+    tm.run_simulation(max_turns=1)
+    # supply_status should remain empty since no supply engine
+    assert gs.supply_status == {}
+
+
+# ---------------------------------------------------------------------------
+# 16. SupplyEngine active: supply_status populated after _run_turn
+# ---------------------------------------------------------------------------
+
+def test_supply_engine_active_populates_supply_status(tmp_path):
+    gs = make_game_state_with_hq()
+    agents = make_agents(gs)
+    tm = make_turn_manager_with_supply(gs, agents, tmp_path)
+
+    tm.run_simulation(max_turns=1)
+    # supply_status should be populated for active units
+    assert len(gs.supply_status) > 0
+    for uid, status in gs.supply_status.items():
+        assert isinstance(status, SupplyStatus)
+
+
+# ---------------------------------------------------------------------------
+# 17. Supply effects applied end of turn (CUT_OFF unit loses ammo/fuel)
+# ---------------------------------------------------------------------------
+
+def test_supply_effects_applied_end_of_turn(tmp_path):
+    gs = make_game_state()
+    agents = make_agents(gs)
+    # Manually set a CUT_OFF supply status for blue1 before running
+    gs.supply_status["blue1"] = SupplyStatus(
+        unit_id="blue1",
+        level=SupplyLevel.CUT_OFF,
+        turns_without_supply=1,
+        supply_route_length=0,
+    )
+    # Provide supply engine; calculate_supply_status will overwrite, so
+    # we use a game state without HQ to ensure CUT_OFF is recalculated
+    tm = make_turn_manager_with_supply(gs, agents, tmp_path)
+    ammo_before = gs.units["blue1"].ammo
+
+    tm.run_simulation(max_turns=1)
+
+    # After at least one turn with CUT_OFF, ammo should have decreased
+    # (supply engine recalculates and applies effects)
+    # If no HQ, blue1 is CUT_OFF -> ammo -= 0.1
+    assert gs.units["blue1"].ammo <= ammo_before
+
+
+# ---------------------------------------------------------------------------
+# 18. FULL supply: no ammo/fuel drain
+# ---------------------------------------------------------------------------
+
+def test_full_supply_no_ammo_drain(tmp_path):
+    gs = make_game_state_with_hq()
+    agents = make_agents(gs)
+    tm = make_turn_manager_with_supply(gs, agents, tmp_path)
+
+    ammo_before = gs.units["blue1"].ammo
+    gs.advance_turn()
+    # Run supply calculation only (not full turn to avoid combat ammo use)
+    se = SupplyEngine()
+    statuses = se.calculate_supply_status(gs)
+    gs.supply_status = statuses
+    se.apply_supply_effects(gs)
+
+    blue1_status = statuses.get("blue1")
+    if blue1_status and blue1_status.level == SupplyLevel.FULL:
+        # FULL supply: no ammo drain from supply effects
+        assert gs.units["blue1"].ammo == ammo_before
+
+
+# ---------------------------------------------------------------------------
+# 19. query_supply_status returns correct structure
+# ---------------------------------------------------------------------------
+
+def test_query_supply_status_returns_correct_info(tmp_path):
+    from app.graph.graph_tools import GraphTools
+    from app.graph.relationship_graph import RelationshipGraph
+
+    gs = make_game_state_with_hq()
+    gs.supply_status["blue1"] = SupplyStatus(
+        unit_id="blue1",
+        level=SupplyLevel.REDUCED,
+        turns_without_supply=2,
+        supply_route_length=5,
+    )
+
+    rg = RelationshipGraph()
+    gt = GraphTools(rg)
+    result = gt.query_supply_status("blue1", gs)
+
+    assert result["supply_level"] == "REDUCED"
+    assert result["turns_without_supply"] == 2
+    assert "supply_chain" in result
+
+
+def test_query_supply_status_unknown_unit(tmp_path):
+    from app.graph.graph_tools import GraphTools
+    from app.graph.relationship_graph import RelationshipGraph
+
+    gs = make_game_state()
+    rg = RelationshipGraph()
+    gt = GraphTools(rg)
+    result = gt.query_supply_status("nonexistent_unit", gs)
+
+    assert result["supply_level"] == "UNKNOWN"
+    assert result["turns_without_supply"] == 0

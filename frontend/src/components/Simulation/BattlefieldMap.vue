@@ -24,6 +24,23 @@
         <g v-for="unit in unitList" :key="unit.id">
           <UnitMarker :unit="unit" :center="hexCenter(unit.position.q, unit.position.r)" :size="hexSize * 0.6" />
         </g>
+        <!-- Phase 2 overlays -->
+        <FogOverlay
+          :hexToPixelX="(h) => hexCenter(h.q, h.r).x"
+          :hexToPixelY="(h) => hexCenter(h.q, h.r).y"
+          :hexWidth="hexSize * Math.sqrt(3)"
+          :hexHeight="hexSize * 2"
+          :allHexes="allHexList"
+        />
+        <SupplyOverlay
+          :getUnitX="(id) => hexCenter(unitPosition(id).q, unitPosition(id).r).x"
+          :getUnitY="(id) => hexCenter(unitPosition(id).q, unitPosition(id).r).y"
+        />
+        <AirMissionMarker
+          :hexToPixelX="(h) => hexCenter(h.q, h.r).x"
+          :hexToPixelY="(h) => hexCenter(h.q, h.r).y"
+          :hexWidth="hexSize * Math.sqrt(3)"
+        />
       </g>
     </svg>
     <!-- Selected hex info -->
@@ -41,6 +58,9 @@
 import { computed, ref } from 'vue'
 import { useSimulationStore } from '../../store/simulation'
 import UnitMarker from './UnitMarker.vue'
+import FogOverlay from './FogOverlay.vue'
+import SupplyOverlay from './SupplyOverlay.vue'
+import AirMissionMarker from './AirMissionMarker.vue'
 
 const store = useSimulationStore()
 const hexSize = 30
@@ -101,6 +121,13 @@ function onPanMove(e) {
   lastMouse.value = { x: e.clientX, y: e.clientY }
 }
 function onPanEnd() { isPanning.value = false }
+
+const allHexList = computed(() => Object.values(store.terrain).map(h => h.coord))
+
+function unitPosition(unitId) {
+  const unit = store.units.find(u => u.id === unitId)
+  return unit ? unit.position : { q: 0, r: 0 }
+}
 </script>
 
 <style scoped>

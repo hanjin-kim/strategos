@@ -16,6 +16,11 @@ export const useSimulationStore = defineStore('simulation', {
     isRunning: false,
     error: null,
     eventSource: null,
+    viewSide: 'OMNISCIENT',
+    currentNarrative: null,
+    intelReports: {},
+    supplyStatus: {},
+    airMissions: [],
   }),
   getters: {
     units: (state) => {
@@ -73,10 +78,19 @@ export const useSimulationStore = defineStore('simulation', {
     async fetchState(turn = null) {
       if (!this.currentSimulationId) return
       try {
-        this.gameState = await getSimulationState(this.currentSimulationId, turn)
+        const data = await getSimulationState(this.currentSimulationId, turn)
+        this.gameState = data
+        if (data.intel_reports) this.intelReports = data.intel_reports
+        if (data.supply_status) this.supplyStatus = data.supply_status
       } catch (e) {
         this.error = e.message
       }
+    },
+    setViewSide(side) {
+      this.viewSide = side
+    },
+    setNarrative(narrative) {
+      this.currentNarrative = narrative
     },
     async fetchStatus() {
       if (!this.currentSimulationId) return

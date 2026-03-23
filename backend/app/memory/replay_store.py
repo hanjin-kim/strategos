@@ -40,6 +40,12 @@ class ReplayStore:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (simulation_id) REFERENCES simulations(id)
                 );
+                CREATE TABLE IF NOT EXISTS narratives (
+                    simulation_id TEXT NOT NULL,
+                    turn INTEGER NOT NULL,
+                    narrative TEXT NOT NULL,
+                    PRIMARY KEY (simulation_id, turn)
+                );
             """)
 
     def _connect(self) -> sqlite3.Connection:
@@ -97,6 +103,25 @@ class ReplayStore:
                 (simulation_id,),
             ).fetchall()
         return [row[0] for row in rows]
+
+    def save_narrative(self, sim_id: str, turn: int, narrative_json: str) -> None:
+        """Save narrative for a turn."""
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO narratives (simulation_id, turn, narrative) VALUES (?, ?, ?)",
+                (sim_id, turn, narrative_json),
+            )
+
+    def get_narrative(self, sim_id: str, turn: int) -> str | None:
+        """Get narrative for a turn. Returns JSON string or None."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT narrative FROM narratives WHERE simulation_id = ? AND turn = ?",
+                (sim_id, turn),
+            ).fetchone()
+        if row is None:
+            return None
+        return row[0]
 
     def list_simulations(self) -> list[dict]:
         with self._connect() as conn:

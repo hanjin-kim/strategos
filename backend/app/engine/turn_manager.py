@@ -13,8 +13,14 @@ from app.engine.movement_engine import MovementEngine
 from app.agents.base_commander import BaseCommander
 from app.agents.theater_commander import TheaterCommander
 from app.agents.battalion_commander import BattalionCommander
+from app.agents.division_commander import DivisionCommander
+from app.engine.intel_engine import IntelEngine
+from app.engine.supply_engine import SupplyEngine
+from app.engine.air_engine import AirEngine
+from app.models.air import AirMission, AirMissionType, SortiePool
 from app.graph.relationship_graph import RelationshipGraph
 from app.memory.replay_store import ReplayStore
+from app.agents.adjudicator import Adjudicator
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +37,10 @@ class TurnManager:
         movement_engine: MovementEngine,
         replay_store: ReplayStore | None = None,
         relationship_graph: RelationshipGraph | None = None,
+        intel_engine: IntelEngine | None = None,
+        supply_engine: SupplyEngine | None = None,
+        air_engine: AirEngine | None = None,
+        adjudicator: Adjudicator | None = None,
         simulation_id: str = "",
         log_dir: str = "data/logs",
     ):
@@ -41,6 +51,10 @@ class TurnManager:
         self.movement_engine = movement_engine
         self.replay_store = replay_store
         self.relationship_graph = relationship_graph
+        self.intel_engine = intel_engine
+        self.supply_engine = supply_engine
+        self.air_engine = air_engine
+        self.adjudicator = adjudicator
         self.simulation_id = simulation_id
         self.log_dir = log_dir
         self._turn_results: list[TurnResult] = []
@@ -75,8 +89,32 @@ class TurnManager:
         self.game_state.advance_turn()
         # Note: advance_turn increments turn counter and resets phase/MP
 
+        # Intel update (before command decisions)
+        if self.intel_engine:
+            for side in [Side.BLUE, Side.RED]:
+                reports = self.intel_engine.update_intel(self.game_state, side)
+                self.game_state.intel_reports[side.value] = reports
+
+        # Supply status calculation (after intel, before command decisions)
+        if self.supply_engine:
+            supply_statuses = self.supply_engine.calculate_supply_status(
+                self.game_state, self.relationship_graph
+            )
+            self.game_state.supply_status = supply_statuses
+
         # Phase 1: COMMAND
         all_actions = self._command_phase()
+
+        # Air mission resolution (within COMMAND phase, before advance_phase)
+        cas_modifiers: dict = {}
+        if self.air_engine and self.game_state.sortie_pools:
+            air_missions = self._collect_air_missions(all_actions)
+            if air_missions:
+                all_assets = self.game_state.air_assets
+                resolved = self.air_engine.resolve_air_missions(
+                    air_missions, self.game_state, all_assets
+                )
+                cas_modifiers = self._extract_cas_modifiers(resolved)
 
         # Phase 2: EXECUTION
         self.game_state.advance_phase()  # -> EXECUTION
@@ -84,7 +122,7 @@ class TurnManager:
 
         # Phase 3: RESOLUTION
         self.game_state.advance_phase()  # -> RESOLUTION
-        combats, destroyed = self._resolution_phase(movement_results, all_actions)
+        combats, destroyed = self._resolution_phase(movement_results, all_actions, cas_modifiers)
 
         # Save snapshot at turn boundary
         if self.replay_store:
@@ -97,8 +135,37 @@ class TurnManager:
         if self.relationship_graph:
             self.relationship_graph.recalculate_adjacency(self.game_state)
 
+        # Intel degradation (end of turn)
+        if self.intel_engine:
+            for side in [Side.BLUE, Side.RED]:
+                current = self.game_state.intel_reports.get(side.value, {})
+                self.game_state.intel_reports[side.value] = self.intel_engine.degrade_intel(
+                    current, self.game_state.turn
+                )
+
+        # Supply effects (end of turn)
+        if self.supply_engine:
+            self.supply_engine.apply_supply_effects(self.game_state)
+
         # Log turn
         self._log_turn(self.game_state.turn, all_actions, combats)
+
+        # Generate narrative (optional)
+        narrative_text = ""
+        if self.adjudicator:
+            turn_result_temp = TurnResult(
+                turn=self.game_state.turn,
+                phase_results={
+                    TurnPhase.COMMAND: {"action_count": len(all_actions)},
+                    TurnPhase.EXECUTION: {"movements": len(movement_results)},
+                    TurnPhase.RESOLUTION: {"combats": len(combats), "destroyed": len(destroyed)},
+                },
+                movements=movement_results,
+                combats=combats,
+                destroyed_units=destroyed,
+            )
+            narrative = self.adjudicator.generate_narrative(turn_result_temp, self.game_state)
+            narrative_text = narrative.summary
 
         return TurnResult(
             turn=self.game_state.turn,
@@ -110,17 +177,15 @@ class TurnManager:
             movements=movement_results,
             combats=combats,
             destroyed_units=destroyed,
+            narrative=narrative_text,
         )
 
     def _command_phase(self) -> list[MilitaryAction]:
         """
-        Theater -> OrderDirective -> Battalion -> MilitaryAction
+        3-tier (Theater -> Division -> Battalion) with 2-tier fallback.
 
-        1. Theater commanders decide (both sides) -> OrderDirectives
-        2. Distribute OrderDirectives to battalion commanders
-        3. Battalion commanders decide -> MilitaryActions
-        4. Constraint engine validates
-        5. Rejected actions get 1 retry
+        If no DivisionCommanders exist for a side, falls back to:
+          Theater -> Battalion (Phase 1 behavior).
         """
         all_actions: list[MilitaryAction] = []
 
@@ -128,16 +193,44 @@ class TurnManager:
             # Step 1: Theater commander generates OrderDirectives
             theater_orders = self._get_theater_orders(side)
 
-            # Step 2: Distribute orders to battalion commanders
-            for order in theater_orders:
-                bn_cmd_id = self._resolve_battalion_commander(order.target_unit_id)
-                if bn_cmd_id and bn_cmd_id in self.agents:
-                    self.agents[bn_cmd_id].receive_orders(order)
+            # Step 2: Check if division commanders exist for this side
+            division_commanders = {
+                cmd_id: agent for cmd_id, agent in self.agents.items()
+                if isinstance(agent, DivisionCommander) and agent.commander.side == side
+            }
+            has_division = len(division_commanders) > 0
 
-            # Step 3: Battalion commanders generate MilitaryActions
+            if has_division:
+                # 3-tier: Theater -> Division -> Battalion
+                for order in theater_orders:
+                    for div_agent in division_commanders.values():
+                        if div_agent.graph_tools:
+                            scope = div_agent.graph_tools.query_command_scope(div_agent.commander.id)
+                            if order.target_unit_id in scope.get("commanded_unit_ids", []):
+                                div_agent.receive_orders(order)
+                                break
+
+                # Division commanders generate more specific OrderDirectives
+                division_orders: list[OrderDirective] = []
+                for div_agent in division_commanders.values():
+                    division_orders.extend(div_agent.decide(self.game_state))
+
+                # Distribute division orders to battalion commanders
+                for order in division_orders:
+                    bn_cmd_id = self._resolve_battalion_commander(order.target_unit_id)
+                    if bn_cmd_id and bn_cmd_id in self.agents:
+                        self.agents[bn_cmd_id].receive_orders(order)
+            else:
+                # 2-tier fallback: Theater -> Battalion (Phase 1 behavior)
+                for order in theater_orders:
+                    bn_cmd_id = self._resolve_battalion_commander(order.target_unit_id)
+                    if bn_cmd_id and bn_cmd_id in self.agents:
+                        self.agents[bn_cmd_id].receive_orders(order)
+
+            # Battalion commanders generate MilitaryActions (same for both paths)
             bn_actions = self._get_battalion_actions(side)
 
-            # Step 4: Build authority map from graph (commander_id -> set of allowed unit_ids)
+            # Build authority map from graph (commander_id -> set of allowed unit_ids)
             authority_map: dict[str, set[str]] = {}
             if self.relationship_graph:
                 from app.graph.graph_tools import GraphTools
@@ -148,20 +241,17 @@ class TurnManager:
                         if scope["commanded_unit_ids"]:
                             authority_map[agent.commander.id] = set(scope["commanded_unit_ids"])
 
-            # Step 5: Validate
             result = self.constraint_engine.validate(
                 bn_actions, self.game_state,
                 authority_map=authority_map if authority_map else None,
             )
             valid = list(result.valid_actions)
 
-            # Step 6: Retry rejected (1 attempt)
             if result.has_rejections:
                 logger.info(
                     "Turn %d %s: %d actions rejected, retrying",
                     self.game_state.turn, side.value, len(result.rejections),
                 )
-                # For simplicity, just accept valid ones (retry would need another LLM call)
 
             all_actions.extend(valid)
 
@@ -209,7 +299,10 @@ class TurnManager:
         return results
 
     def _resolution_phase(
-        self, movement_results: list[MovementResult], actions: list[MilitaryAction]
+        self,
+        movement_results: list[MovementResult],
+        actions: list[MilitaryAction],
+        cas_modifiers: dict | None = None,
     ) -> tuple[list[CombatOutcome], list[str]]:
         """
         WEGO 2-pass combat resolution.
@@ -227,7 +320,17 @@ class TurnManager:
         for attackers, defenders, terrain in engagements:
             if not attackers or not defenders:
                 continue
-            outcome = self.combat_resolver.resolve_combat(attackers, defenders, terrain)
+            supply_map = self.game_state.supply_status if self.supply_engine else None
+            # CAS benefits attacker at defender's position
+            cas_mod = 0.0
+            if cas_modifiers:
+                for defender in defenders:
+                    cas_mod = max(cas_mod, cas_modifiers.get(str(defender.position), 0.0))
+            outcome = self.combat_resolver.resolve_combat(
+                attackers, defenders, terrain,
+                cas_modifier=cas_mod,
+                supply_status_map=supply_map,
+            )
             outcomes.append(outcome)
 
         # Pass 2: Apply all outcomes simultaneously
@@ -338,6 +441,49 @@ class TurnManager:
                         processed_pairs.add(pair)
 
         return engagements
+
+    def _collect_air_missions(self, actions: list[MilitaryAction]) -> list[AirMission]:
+        """Placeholder: collect air missions from agent decisions.
+        For now, auto-generate CAS missions for units in contact."""
+        import uuid
+        missions = []
+        for side in [Side.BLUE, Side.RED]:
+            pool = self.game_state.sortie_pools.get(side.value)
+            if not pool:
+                continue
+            remaining = pool.remaining_sorties
+            available_assets = [
+                a for a in self.game_state.air_assets.values()
+                if a.side == side and AirMissionType.CAS in a.missions_capable
+            ]
+            for action in actions:
+                if remaining <= 0 or not available_assets:
+                    break
+                unit = self.game_state.get_unit(action.unit_id)
+                if not unit or unit.side != side or action.action_type != ActionType.ATTACK:
+                    continue
+                if action.target_hex:
+                    asset = available_assets[0]
+                    missions.append(AirMission(
+                        mission_id=str(uuid.uuid4()),
+                        turn=self.game_state.turn,
+                        side=side,
+                        mission_type=AirMissionType.CAS,
+                        asset_id=asset.id,
+                        target_hex=action.target_hex,
+                    ))
+                    remaining -= 1
+        return missions
+
+    def _extract_cas_modifiers(self, resolved_missions: list[AirMission]) -> dict:
+        """Extract CAS modifiers from resolved missions. Key: str(HexCoord), value: float modifier."""
+        modifiers = {}
+        for m in resolved_missions:
+            if m.mission_type == AirMissionType.CAS and m.result == "SUCCESS" and m.target_hex:
+                key = str(m.target_hex)
+                current = modifiers.get(key, 0.0)
+                modifiers[key] = min(current + 0.15, 0.5)
+        return modifiers
 
     def _find_retreat_hex(self, unit, num_hexes: int) -> HexCoord | None:
         """Find a hex to retreat to, away from the nearest enemy."""

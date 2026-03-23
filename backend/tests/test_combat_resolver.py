@@ -4,12 +4,14 @@ from app.models.domain import (
     HexCoord, Side, UnitType, UnitSize, UnitStatus, TerrainHex, TerrainType, Unit
 )
 from app.models.simulation import CombatResult
+from app.models.supply import SupplyLevel, SupplyStatus
 from app.engine.combat_resolver import (
     CRT_TABLE,
     classify_force_ratio,
     terrain_defense_modifier,
     terrain_attack_modifier,
     supply_modifier,
+    supply_status_modifier,
     morale_modifier,
     CombatResolver,
     LOSS_TABLE,
@@ -396,3 +398,93 @@ class _FixedRNG:
 
     def randint(self, _a: int, _b: int) -> int:
         return self._value
+
+
+# ---------------------------------------------------------------------------
+# 15. supply_status_modifier: SupplyLevel -> correct float
+# ---------------------------------------------------------------------------
+
+def _make_supply_status(unit_id: str, level: SupplyLevel) -> SupplyStatus:
+    return SupplyStatus(unit_id=unit_id, level=level, turns_without_supply=0, supply_route_length=0)
+
+
+class TestSupplyStatusModifier:
+    def test_full_returns_1_0(self):
+        unit = make_unit(uid="u1")
+        smap = {"u1": _make_supply_status("u1", SupplyLevel.FULL)}
+        assert supply_status_modifier(unit, smap) == 1.0
+
+    def test_reduced_returns_0_8(self):
+        unit = make_unit(uid="u1")
+        smap = {"u1": _make_supply_status("u1", SupplyLevel.REDUCED)}
+        assert supply_status_modifier(unit, smap) == 0.8
+
+    def test_cut_off_returns_0_5(self):
+        unit = make_unit(uid="u1")
+        smap = {"u1": _make_supply_status("u1", SupplyLevel.CUT_OFF)}
+        assert supply_status_modifier(unit, smap) == 0.5
+
+    def test_missing_unit_returns_1_0(self):
+        unit = make_unit(uid="u1")
+        smap: dict = {}
+        assert supply_status_modifier(unit, smap) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# 16. resolve_combat with supply_status_map: CUT_OFF halves attack power
+# ---------------------------------------------------------------------------
+
+def test_resolve_combat_cut_off_reduces_force_ratio():
+    """CUT_OFF attacker has 0.5 modifier vs FULL attacker -> lower force ratio."""
+    terrain = make_terrain()
+    atk_full = [make_unit(uid="a1", name="Attacker", attack_power=20.0, ammo=1.0)]
+    atk_cut  = [make_unit(uid="a1", name="Attacker", attack_power=20.0, ammo=1.0)]
+    dfn = [make_unit(uid="d1", name="Defender", side=Side.RED, defense_power=10.0)]
+
+    full_map = {"a1": _make_supply_status("a1", SupplyLevel.FULL)}
+    cut_map  = {"a1": _make_supply_status("a1", SupplyLevel.CUT_OFF)}
+
+    resolver_full = CombatResolver(rng_seed=1)
+    resolver_cut  = CombatResolver(rng_seed=1)
+
+    outcome_full = resolver_full.resolve_combat(atk_full, dfn, terrain, supply_status_map=full_map)
+    outcome_cut  = resolver_cut.resolve_combat(atk_cut, dfn, terrain, supply_status_map=cut_map)
+
+    assert outcome_full.force_ratio > outcome_cut.force_ratio
+
+
+def test_resolve_combat_reduced_lowers_force_ratio():
+    """REDUCED attacker (0.8) has lower ratio than FULL (1.0)."""
+    terrain = make_terrain()
+    atk = [make_unit(uid="a1", name="Attacker", attack_power=20.0, ammo=1.0)]
+    dfn = [make_unit(uid="d1", name="Defender", side=Side.RED, defense_power=10.0)]
+
+    full_map    = {"a1": _make_supply_status("a1", SupplyLevel.FULL)}
+    reduced_map = {"a1": _make_supply_status("a1", SupplyLevel.REDUCED)}
+
+    resolver_full    = CombatResolver(rng_seed=1)
+    resolver_reduced = CombatResolver(rng_seed=1)
+
+    outcome_full    = resolver_full.resolve_combat(atk, dfn, terrain, supply_status_map=full_map)
+    outcome_reduced = resolver_reduced.resolve_combat(atk, dfn, terrain, supply_status_map=reduced_map)
+
+    assert outcome_full.force_ratio > outcome_reduced.force_ratio
+
+
+def test_resolve_combat_no_supply_map_uses_ammo_logic():
+    """When supply_status_map=None, ammo-based supply_modifier is used (backward compat)."""
+    terrain = make_terrain()
+    # low ammo -> ammo-based modifier = 0.5
+    atk_low  = [make_unit(uid="a1", name="Attacker", attack_power=20.0, ammo=0.1)]
+    atk_full = [make_unit(uid="a1", name="Attacker", attack_power=20.0, ammo=1.0)]
+    dfn = [make_unit(uid="d1", name="Defender", side=Side.RED, defense_power=10.0)]
+
+    resolver_low  = CombatResolver(rng_seed=2)
+    resolver_full = CombatResolver(rng_seed=2)
+
+    outcome_low  = resolver_low.resolve_combat(atk_low, dfn, terrain)   # supply_status_map=None
+    outcome_full = resolver_full.resolve_combat(atk_full, dfn, terrain)  # supply_status_map=None
+
+    # low ammo -> ratio=1.0, full ammo -> ratio=2.0
+    assert outcome_full.force_ratio == pytest.approx(2.0)
+    assert outcome_low.force_ratio  == pytest.approx(1.0)

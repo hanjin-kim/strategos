@@ -3,6 +3,7 @@
     <div class="header">
       <h2>Simulation</h2>
       <div class="status-bar">
+        <SideToggle />
         <span class="status" :class="store.status">{{ store.status || 'loading' }}</span>
         <span>Turn {{ store.currentTurn }} / {{ store.maxTurns }}</span>
         <button v-if="store.isRunning" @click="store.stop()" class="stop-btn">Stop</button>
@@ -14,6 +15,7 @@
       </div>
       <div class="side-panel">
         <ForceStatus />
+        <NarrativePanel />
         <TurnTimeline />
         <CommandLog />
       </div>
@@ -28,6 +30,8 @@ import BattlefieldMap from '../components/Simulation/BattlefieldMap.vue'
 import ForceStatus from '../components/Simulation/ForceStatus.vue'
 import TurnTimeline from '../components/Simulation/TurnTimeline.vue'
 import CommandLog from '../components/Simulation/CommandLog.vue'
+import SideToggle from '../components/Simulation/SideToggle.vue'
+import NarrativePanel from '../components/Simulation/NarrativePanel.vue'
 
 const props = defineProps({ id: String })
 const store = useSimulationStore()

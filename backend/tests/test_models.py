@@ -239,7 +239,7 @@ class TestEnums:
         assert Side.RED.value == "RED"
 
     def test_unit_type_all_values(self):
-        expected = {"INFANTRY", "MECHANIZED", "ARMOR", "ARTILLERY", "AIR_DEFENSE", "ENGINEER", "HQ"}
+        expected = {"INFANTRY", "MECHANIZED", "ARMOR", "ARTILLERY", "AIR_DEFENSE", "ENGINEER", "HQ", "RECON", "SAM", "AAA"}
         assert {e.value for e in UnitType} == expected
 
     def test_mission_type_all_values(self):

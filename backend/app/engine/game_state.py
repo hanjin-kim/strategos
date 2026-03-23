@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from app.models.domain import HexCoord, Side, Unit, Commander, TerrainHex, Force, UnitStatus
+from app.models.intel import IntelReport
+from app.models.supply import SupplyStatus
 from app.models.simulation import TurnPhase
 from app.utils.hex_grid import hex_neighbors
 
@@ -16,6 +18,10 @@ class GameState:
         self.commanders: dict[str, Commander] = {}
         self.forces: dict[Side, Force] = {}
         self.combat_log: list = []
+        self.intel_reports: dict[str, dict[str, object]] = {}  # side_value -> {unit_id -> IntelReport}
+        self.supply_status: dict[str, object] = {}  # unit_id -> SupplyStatus
+        self.air_assets: dict[str, object] = {}  # asset_id -> AirAsset
+        self.sortie_pools: dict[str, object] = {}  # side_value -> SortiePool
         if scenario_data:
             self._load_scenario(scenario_data)
 
@@ -68,10 +74,34 @@ class GameState:
         for uid, unit in self.units.items():
             if unit.status == UnitStatus.ACTIVE:
                 self.units[uid] = unit.model_copy(update={"movement_points": unit.max_movement_points})
+        # Reset sortie pools each turn
+        for side_val, pool in self.sortie_pools.items():
+            if hasattr(pool, 'model_copy'):
+                self.sortie_pools[side_val] = pool.model_copy(
+                    update={"remaining_sorties": pool.total_sorties}
+                )
 
     # --- Snapshot (turn boundary) ---
     def to_snapshot(self) -> dict:
         """Serialize entire state to JSON-compatible dict."""
+        intel_data = {}
+        for side_val, reports in self.intel_reports.items():
+            intel_data[side_val] = {
+                uid: r.model_dump() if hasattr(r, "model_dump") else r
+                for uid, r in reports.items()
+            }
+        supply_data = {
+            uid: s.model_dump() if hasattr(s, "model_dump") else s
+            for uid, s in self.supply_status.items()
+        }
+        air_assets_data = {
+            aid: a.model_dump() if hasattr(a, "model_dump") else a
+            for aid, a in self.air_assets.items()
+        }
+        sortie_pools_data = {
+            sv: p.model_dump() if hasattr(p, "model_dump") else p
+            for sv, p in self.sortie_pools.items()
+        }
         return {
             "turn": self.turn,
             "phase": self.phase.value,
@@ -79,6 +109,10 @@ class GameState:
             "terrain": {f"{c.q},{c.r}": t.model_dump() for c, t in self.terrain.items()},
             "commanders": {cid: c.model_dump() for cid, c in self.commanders.items()},
             "forces": {s.value: f.model_dump() for s, f in self.forces.items()},
+            "intel_reports": intel_data,
+            "supply_status": supply_data,
+            "air_assets": air_assets_data,
+            "sortie_pools": sortie_pools_data,
         }
 
     @classmethod
@@ -95,6 +129,24 @@ class GameState:
             state.terrain[coord] = TerrainHex.model_validate(t)
         state.commanders = {cid: Commander.model_validate(c) for cid, c in data["commanders"].items()}
         state.forces = {Side(s): Force.model_validate(f) for s, f in data["forces"].items()}
+        state.intel_reports = {}
+        for side_val, reports in data.get("intel_reports", {}).items():
+            state.intel_reports[side_val] = {
+                uid: IntelReport.model_validate(r) for uid, r in reports.items()
+            }
+        state.supply_status = {
+            uid: SupplyStatus.model_validate(s)
+            for uid, s in data.get("supply_status", {}).items()
+        }
+        from app.models.air import AirAsset, SortiePool
+        state.air_assets = {
+            aid: AirAsset.model_validate(a)
+            for aid, a in data.get("air_assets", {}).items()
+        }
+        state.sortie_pools = {
+            sv: SortiePool.model_validate(p)
+            for sv, p in data.get("sortie_pools", {}).items()
+        }
         return state
 
     # --- Scenario loading ---
@@ -162,3 +214,27 @@ class GameState:
                 commander_ids=commander_ids,
                 unit_ids=unit_ids,
             )
+
+        # Load air assets
+        for side_str, force_data in data.get("forces", {}).items():
+            side = Side(side_str)
+            if "air_assets" in force_data:
+                from app.models.air import AirAsset, SortiePool, AirMissionType
+                for asset_data in force_data["air_assets"].get("assets", []):
+                    asset = AirAsset(
+                        id=asset_data["id"],
+                        name=asset_data["name"],
+                        side=side,
+                        asset_type=asset_data["asset_type"],
+                        missions_capable=[AirMissionType(m) for m in asset_data["missions_capable"]],
+                        sortie_count=asset_data["sortie_count"],
+                        attack_power=asset_data["attack_power"],
+                        defense_against_sam=asset_data["defense_against_sam"],
+                    )
+                    self.air_assets[asset.id] = asset
+                total = force_data["air_assets"].get("total_sorties_per_turn", 0)
+                self.sortie_pools[side.value] = SortiePool(
+                    side=side,
+                    total_sorties=total,
+                    remaining_sorties=total,
+                )

@@ -161,6 +161,16 @@ class GraphTools:
             return {"friendly": friendly, "enemy": []}
         return {"friendly": friendly, "enemy": enemy}
 
+    def query_supply_status(self, unit_id: str, game_state) -> dict:
+        """Agent context: supply status summary for a unit."""
+        status = game_state.supply_status.get(unit_id)
+        supply_chain = self.query_supply_chain(unit_id)
+        return {
+            "supply_level": status.level.value if status and hasattr(status, "level") else "UNKNOWN",
+            "turns_without_supply": status.turns_without_supply if status and hasattr(status, "turns_without_supply") else 0,
+            "supply_chain": supply_chain,
+        }
+
     def get_tool_definitions(self) -> list[dict]:
         """Return OpenAI function calling format tool definitions."""
         return [
