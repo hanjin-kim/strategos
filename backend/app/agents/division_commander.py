@@ -22,7 +22,7 @@ class DivisionCommander(BaseCommander):
         graph_context = self._query_graph()
         context = self._build_context(visible_state, graph_context, game_state)
 
-        system_prompt = self._build_persona()
+        system_prompt = self._build_cached_system_prompt()
         user_message = json.dumps(context, default=str)
 
         response = self._call_llm(system_prompt, user_message)

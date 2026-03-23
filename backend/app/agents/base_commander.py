@@ -11,6 +11,15 @@ from app.utils.hex_grid import hex_neighbors
 
 logger = logging.getLogger(__name__)
 
+DOCTRINE_PROMPT = """## MILITARY DOCTRINE
+- You are a military commander in a turn-based wargame simulation.
+- Issue orders ONLY for units in your COMMAND AUTHORITY. Never command other units.
+- Consider terrain, supply status, enemy positions, and intel confidence levels.
+- Prioritize mission objectives from your superior commander.
+- Conserve combat power — avoid unnecessary engagements.
+- Protect supply lines and maintain unit cohesion.
+"""
+
 
 class BaseCommander:
     """Base class for all commander agents. OODA loop + graph queries + rolling memory."""
@@ -32,6 +41,7 @@ class BaseCommander:
         self._current_orders: OrderDirective | None = None
         self._consecutive_failures = 0
         self._fallback_mode = False
+        self._cached_system_prompt: str | None = None
         self._client = None
         self._model = llm_config.get("model", "qwen-plus")
         self._temperature = llm_config.get("temperature", 0.0)
@@ -214,6 +224,18 @@ class BaseCommander:
     def _build_persona(self) -> str:
         """Build system prompt. Override in subclasses."""
         return f"You are {self.commander.name}, a {self.commander.rank} commander for {self.commander.side.value} force."
+
+    def _build_cached_system_prompt(self) -> str:
+        """Build system prompt from L1 (doctrine) + L2 (scenario). Called once at first use, then cached."""
+        if self._cached_system_prompt is not None:
+            return self._cached_system_prompt
+        persona = self._build_persona()
+        self._cached_system_prompt = DOCTRINE_PROMPT + "\n" + persona
+        return self._cached_system_prompt
+
+    def invalidate_cache(self) -> None:
+        """Call when scenario changes (e.g., batch simulation new run)."""
+        self._cached_system_prompt = None
 
     def _update_memory(self, turn: int, context: dict, actions: list) -> None:
         """Save turn record to rolling memory."""

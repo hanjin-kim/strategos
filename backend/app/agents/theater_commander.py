@@ -33,7 +33,7 @@ class TheaterCommander(BaseCommander):
         graph_ctx = self._query_graph()
         context = self._build_context(visible, graph_ctx, game_state)
 
-        system_prompt = self._build_persona()
+        system_prompt = self._build_cached_system_prompt()
         user_message = json.dumps(context, ensure_ascii=False)
 
         response = self._call_llm(system_prompt, user_message)

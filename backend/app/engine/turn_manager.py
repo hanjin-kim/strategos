@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from app.models.domain import Side, UnitStatus, HexCoord
 from app.models.actions import MilitaryAction, ActionType, OrderDirective
@@ -180,20 +181,61 @@ class TurnManager:
             narrative=narrative_text,
         )
 
+    def _call_agents_parallel(self, agents_to_call: list, game_state) -> list:
+        """Call multiple agents in parallel, collect results."""
+        if not agents_to_call:
+            return []
+
+        # For single agent, call directly (no thread overhead)
+        if len(agents_to_call) == 1:
+            return agents_to_call[0].decide(game_state)
+
+        all_results = []
+        with ThreadPoolExecutor(max_workers=min(len(agents_to_call), 6)) as executor:
+            futures = {
+                executor.submit(agent.decide, game_state): agent
+                for agent in agents_to_call
+            }
+            for future in as_completed(futures):
+                try:
+                    results = future.result(timeout=60)
+                    all_results.extend(results)
+                except Exception as e:
+                    agent = futures[future]
+                    logger.warning("Agent %s parallel call failed: %s", agent.commander.id, e)
+        return all_results
+
     def _command_phase(self) -> list[MilitaryAction]:
         """
         3-tier (Theater -> Division -> Battalion) with 2-tier fallback.
+        Within each tier, agents are called in parallel across sides.
 
         If no DivisionCommanders exist for a side, falls back to:
           Theater -> Battalion (Phase 1 behavior).
         """
         all_actions: list[MilitaryAction] = []
 
-        for side in [Side.BLUE, Side.RED]:
-            # Step 1: Theater commander generates OrderDirectives
-            theater_orders = self._get_theater_orders(side)
+        # Step 1: Theater commanders (parallel across sides)
+        theater_agents = [
+            agent for agent in self.agents.values()
+            if isinstance(agent, TheaterCommander)
+        ]
+        theater_results = self._call_agents_parallel(theater_agents, self.game_state)
 
-            # Step 2: Check if division commanders exist for this side
+        # Separate orders by side
+        theater_orders_by_side: dict[str, list] = {}
+        for order in theater_results:
+            issuer = self.agents.get(order.issuer_id) or next(
+                (a for a in self.agents.values() if hasattr(a, 'commander') and a.commander.id == order.issuer_id),
+                None,
+            )
+            if issuer:
+                side_val = issuer.commander.side.value
+                theater_orders_by_side.setdefault(side_val, []).append(order)
+
+        # Step 2: Distribute theater orders and prepare division/battalion agents
+        for side in [Side.BLUE, Side.RED]:
+            side_orders = theater_orders_by_side.get(side.value, [])
             division_commanders = {
                 cmd_id: agent for cmd_id, agent in self.agents.items()
                 if isinstance(agent, DivisionCommander) and agent.commander.side == side
@@ -201,36 +243,43 @@ class TurnManager:
             has_division = len(division_commanders) > 0
 
             if has_division:
-                # 3-tier: Theater -> Division -> Battalion
-                for order in theater_orders:
+                for order in side_orders:
                     for div_agent in division_commanders.values():
                         if div_agent.graph_tools:
                             scope = div_agent.graph_tools.query_command_scope(div_agent.commander.id)
                             if order.target_unit_id in scope.get("commanded_unit_ids", []):
                                 div_agent.receive_orders(order)
                                 break
-
-                # Division commanders generate more specific OrderDirectives
-                division_orders: list[OrderDirective] = []
-                for div_agent in division_commanders.values():
-                    division_orders.extend(div_agent.decide(self.game_state))
-
-                # Distribute division orders to battalion commanders
-                for order in division_orders:
-                    bn_cmd_id = self._resolve_battalion_commander(order.target_unit_id)
-                    if bn_cmd_id and bn_cmd_id in self.agents:
-                        self.agents[bn_cmd_id].receive_orders(order)
             else:
-                # 2-tier fallback: Theater -> Battalion (Phase 1 behavior)
-                for order in theater_orders:
+                # 2-tier fallback: distribute theater orders directly to battalions
+                for order in side_orders:
                     bn_cmd_id = self._resolve_battalion_commander(order.target_unit_id)
                     if bn_cmd_id and bn_cmd_id in self.agents:
                         self.agents[bn_cmd_id].receive_orders(order)
 
-            # Battalion commanders generate MilitaryActions (same for both paths)
-            bn_actions = self._get_battalion_actions(side)
+        # Step 3: Division commanders (parallel across all sides)
+        division_agents = [
+            agent for agent in self.agents.values()
+            if isinstance(agent, DivisionCommander)
+        ]
+        if division_agents:
+            division_results = self._call_agents_parallel(division_agents, self.game_state)
+            for order in division_results:
+                bn_cmd_id = self._resolve_battalion_commander(order.target_unit_id)
+                if bn_cmd_id and bn_cmd_id in self.agents:
+                    self.agents[bn_cmd_id].receive_orders(order)
 
-            # Build authority map from graph (commander_id -> set of allowed unit_ids)
+        # Step 4: Battalion commanders (parallel — biggest speedup)
+        battalion_agents = [
+            agent for agent in self.agents.values()
+            if isinstance(agent, BattalionCommander)
+        ]
+        bn_actions = self._call_agents_parallel(battalion_agents, self.game_state)
+
+        # Step 5: Validate per side
+        for side in [Side.BLUE, Side.RED]:
+            side_actions = [a for a in bn_actions if self._get_action_side(a) == side]
+
             authority_map: dict[str, set[str]] = {}
             if self.relationship_graph:
                 from app.graph.graph_tools import GraphTools
@@ -242,20 +291,25 @@ class TurnManager:
                             authority_map[agent.commander.id] = set(scope["commanded_unit_ids"])
 
             result = self.constraint_engine.validate(
-                bn_actions, self.game_state,
+                side_actions, self.game_state,
                 authority_map=authority_map if authority_map else None,
             )
             valid = list(result.valid_actions)
 
             if result.has_rejections:
                 logger.info(
-                    "Turn %d %s: %d actions rejected, retrying",
+                    "Turn %d %s: %d actions rejected",
                     self.game_state.turn, side.value, len(result.rejections),
                 )
 
             all_actions.extend(valid)
 
         return all_actions
+
+    def _get_action_side(self, action) -> Side:
+        """Determine which side an action belongs to."""
+        unit = self.game_state.get_unit(action.unit_id)
+        return unit.side if unit else Side.BLUE
 
     def _get_theater_orders(self, side: Side) -> list[OrderDirective]:
         """Get orders from theater commander for this side."""
