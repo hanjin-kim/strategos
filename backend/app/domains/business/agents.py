@@ -31,6 +31,8 @@ class BusinessAgent:
         self._failures = 0
         self._fallback_mode = False
         self._rng = random.Random(hash(self.commander_id))
+        self._cached_system_prompt: str | None = None  # L1+L2 cache
+        self._current_order = None
 
         api_key = llm_config.get("api_key", "")
         if api_key:
@@ -51,11 +53,11 @@ class BusinessAgent:
         # LLM path
         try:
             context = self._build_context(state, unit)
-            prompt = self._doctrine + "\n" + self._build_persona()
+            system_prompt = self._get_cached_system_prompt(state)
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=[
-                    {"role": "system", "content": prompt},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": json.dumps(context, default=str)},
                 ],
                 temperature=0.3,
@@ -73,6 +75,29 @@ class BusinessAgent:
         """Receive strategic directive from CEO/VP."""
         self._current_order = order
 
+    def _get_cached_system_prompt(self, state=None) -> str:
+        """L1 doctrine + L2 persona + market structure. Cached after first call."""
+        if self._cached_system_prompt is not None:
+            return self._cached_system_prompt
+
+        l1 = self._doctrine
+        l2 = self._build_persona()
+
+        # L2 market structure (doesn't change within a simulation)
+        if state and hasattr(state, "market_map") and state.market_map:
+            segments = list(state.market_map.keys())
+            l2 += f"\n\n## MARKET STRUCTURE\nSegments: {', '.join(segments)}\n"
+            own_units = state.get_units_by_side(self.side) if hasattr(state, "get_units_by_side") else []
+            if own_units:
+                unit_list = ", ".join(
+                    f"{u.id}({u.position.region}:{u.position.segment})"
+                    for u in own_units if hasattr(u.position, "region")
+                )
+                l2 += f"Your units: {unit_list}\n"
+
+        self._cached_system_prompt = l1 + "\n" + l2
+        return self._cached_system_prompt
+
     def _build_persona(self) -> str:
         return (
             f"You are {self.commander['name']}, {self.rank} at {self.side}.\n"
@@ -83,6 +108,7 @@ class BusinessAgent:
         )
 
     def _build_context(self, state, unit) -> dict:
+        """L3 dynamic context only — changes every turn."""
         competitors = (
             state.get_adjacent_competitors(self.unit_id)
             if hasattr(state, "get_adjacent_competitors")
@@ -90,16 +116,29 @@ class BusinessAgent:
         )
         return {
             "turn": state.turn,
-            "my_unit": unit.model_dump() if hasattr(unit, "model_dump") else {"id": unit.id},
-            "competitors": [
-                c.model_dump() if hasattr(c, "model_dump") else {"id": c.id}
-                for c in competitors
-            ],
-            "market_position": (
-                f"{unit.position.region}:{unit.position.segment}"
-                if hasattr(unit.position, "region")
-                else str(unit.position)
-            ),
+            "my_unit": {
+                "id": unit.id, "name": unit.name,
+                "market_share": getattr(unit, "market_share", 0),
+                "competitive_power": getattr(unit, "competitive_power", 0),
+                "brand_loyalty": getattr(unit, "brand_loyalty", 0),
+                "marketing_budget": getattr(unit, "marketing_budget", 0),
+                "cash_reserves": getattr(unit, "cash_reserves", 0),
+                "rd_capability": getattr(unit, "rd_capability", 0),
+                "position": (
+                    f"{unit.position.region}:{unit.position.segment}"
+                    if hasattr(unit.position, "region") else str(unit.position)
+                ),
+            },
+            "competitors": [{
+                "id": c.id, "name": c.name,
+                "market_share": getattr(c, "market_share", 0),
+                "competitive_power": getattr(c, "competitive_power", 0),
+                "position": (
+                    f"{c.position.region}:{c.position.segment}"
+                    if hasattr(c.position, "region") else str(c.position)
+                ),
+            } for c in competitors],
+            "orders_from_ceo": self._current_order if self._current_order else None,
         }
 
     def _fallback_decide(self, state, unit) -> list:
