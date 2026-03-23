@@ -10,7 +10,7 @@ from app.agents.division_commander import DivisionCommander
 from app.agents.battalion_commander import BattalionCommander
 from app.graph.relationship_graph import RelationshipGraph
 from app.graph.graph_tools import GraphTools
-from app.domains.military.adapters import MilitaryCommandOrchestrator
+from app.domains.business.orchestrator import BusinessCommandOrchestrator
 
 
 class BusinessDomainFactory:
@@ -41,16 +41,17 @@ class BusinessDomainFactory:
         from app.engine.air_engine import AirEngine
 
         constraint_engine = ConstraintEngine()
+        business_constraints = BusinessConstraints()
 
         return {
             "game_state": state,
             "space": MarketSpace(connections, terrains),
             "interaction_resolver": MarketCompetitionResolver(rng_seed=rng_seed),
             "mover": BusinessMover(),
-            "constraints": BusinessConstraints(),
+            "constraints": business_constraints,
             "victory_checker": BusinessVictory(),
-            "command_orchestrator": MilitaryCommandOrchestrator(relationship_graph, constraint_engine),
-            # Raw engines for backward compat with TurnManager
+            "command_orchestrator": BusinessCommandOrchestrator(constraint_validator=business_constraints),
+            # Raw engines kept for backward compat with tests that check these keys
             "combat_resolver": CombatResolver(rng_seed=rng_seed),
             "movement_engine": MovementEngine(),
             "constraint_engine": constraint_engine,

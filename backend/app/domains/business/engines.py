@@ -66,11 +66,12 @@ class MarketCompetitionResolver:
         defender = targets[0]
 
         # Competitive power comparison
-        atk_power = getattr(attacker, 'competitive_power', 5.0)
-        def_loyalty = getattr(defender, 'brand_loyalty', 5.0)
+        # Map: competitive_power=attack_power, brand_loyalty=defense_power, marketing_budget=ammo
+        atk_power = getattr(attacker, 'competitive_power', None) or getattr(attacker, 'attack_power', 5.0)
+        def_loyalty = getattr(defender, 'brand_loyalty', None) or getattr(defender, 'defense_power', 5.0)
 
         # Marketing budget boost
-        atk_marketing = getattr(attacker, 'marketing_budget', 0.5)
+        atk_marketing = getattr(attacker, 'marketing_budget', None) or getattr(attacker, 'ammo', 0.5)
 
         # Calculate force ratio
         effective_attack = atk_power * (1.0 + atk_marketing * 0.3)
