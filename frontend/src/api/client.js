@@ -49,6 +49,31 @@ export async function getSimulationNarrative(simId, turn) {
   return data
 }
 
+export async function createBatch(scenarioName, parameterSets) {
+  const { data } = await api.post('/batches', { scenario_name: scenarioName, parameter_sets: parameterSets })
+  return data
+}
+
+export async function getBatchStatus(batchId) {
+  const { data } = await api.get(`/batches/${batchId}/status`)
+  return data
+}
+
+export async function getBatchReport(batchId) {
+  const { data } = await api.get(`/batches/${batchId}/report`)
+  return data
+}
+
+export async function getBatchRuns(batchId) {
+  const { data } = await api.get(`/batches/${batchId}/runs`)
+  return data
+}
+
+export async function listBatches() {
+  const { data } = await api.get('/batches')
+  return data
+}
+
 export function connectStream(simId, onUpdate) {
   const source = new EventSource(`/api/simulations/${simId}/stream`)
   source.onmessage = (event) => {

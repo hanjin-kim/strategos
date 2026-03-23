@@ -1,4 +1,5 @@
 from __future__ import annotations
+import random
 import uuid
 from app.models.domain import Unit, UnitStatus, HexCoord
 from app.models.actions import MilitaryAction, ActionType, OrderDirective, MissionType
@@ -23,6 +24,8 @@ class RuleBasedFallback:
         unit: Unit,
         game_state,  # GameState
         superior_orders: OrderDirective | None = None,
+        rng: random.Random | None = None,
+        personality_traits: dict[str, float] | None = None,
     ) -> list[MilitaryAction]:
         """Generate fallback actions for a single unit."""
         if unit.status == UnitStatus.DESTROYED:
@@ -32,16 +35,35 @@ class RuleBasedFallback:
         if unit.status == UnitStatus.ROUTED:
             return [self._make_retreat(commander_id, unit, game_state)]
 
-        # Rule 2: Enemy adjacent -> defend
+        # Rule 2: Enemy adjacent -> defend (personality: aggression may override to ATTACK)
         enemies = game_state.get_adjacent_enemies(unit.id)
         if enemies:
+            if (
+                personality_traits is not None
+                and rng is not None
+                and personality_traits.get("aggression", 0.0) > 0.7
+                and rng.random() < personality_traits["aggression"]
+            ):
+                return [self._make_action(commander_id, unit, ActionType.ATTACK,
+                                          target_unit_id=enemies[0].id)]
             return [self._make_action(commander_id, unit, ActionType.DEFEND)]
 
         # Rule 3-5: Follow superior orders if present
         if superior_orders:
             return self._follow_orders(commander_id, unit, superior_orders, game_state)
 
-        # Rule 6: Default hold
+        # Rule 6: Default hold (personality: caution may trigger RETREAT if weak)
+        if (
+            personality_traits is not None
+            and rng is not None
+            and personality_traits.get("caution", 0.0) > 0.7
+            and unit.strength < 0.5
+        ):
+            retreat_hex = self._find_retreat_hex(unit, game_state)
+            if retreat_hex:
+                return [self._make_action(commander_id, unit, ActionType.RETREAT,
+                                          target_hex=retreat_hex)]
+
         return [self._make_action(commander_id, unit, ActionType.HOLD)]
 
     def _follow_orders(

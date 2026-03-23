@@ -16,6 +16,7 @@ class ReplayStore:
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript("""
+                PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS simulations (
                     id TEXT PRIMARY KEY,
                     scenario_name TEXT NOT NULL,

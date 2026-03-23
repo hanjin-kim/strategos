@@ -18,6 +18,12 @@ def create_app() -> Flask:
     except ImportError:
         pass
 
+    try:
+        from app.api.batch import batch_bp
+        app.register_blueprint(batch_bp)
+    except ImportError:
+        pass
+
     @app.get("/api/health")
     def health():
         return jsonify({"status": "ok"})
