@@ -3,7 +3,7 @@
     <header class="sim-header">
       <h1>{{ scenarioName || 'Business Simulation' }}</h1>
       <div class="header-controls">
-        <span class="turn-badge">Turn {{ turn }}</span>
+        <span class="turn-badge">Turn {{ turn }}/{{ maxTurns }}</span>
         <span class="phase-badge">{{ phase }}</span>
         <span class="status-badge" :class="'status-' + status">{{ status }}</span>
       </div>
@@ -55,6 +55,7 @@ const simId = computed(() => route.params.id)
 const state = ref({})
 const status = ref('loading')
 const turn = ref(0)
+const maxTurns = ref(0)
 const phase = ref('')
 const narrative = ref('')
 const scenarioName = ref('')
@@ -110,6 +111,7 @@ async function fetchStatus() {
     const data = await getSimulationStatus(simId.value)
     status.value = data.status || 'unknown'
     if (data.scenario_name) scenarioName.value = data.scenario_name
+    if (data.max_turns) maxTurns.value = data.max_turns
     if (data.status === 'completed' || data.status === 'stopped' || data.status === 'error') {
       clearInterval(pollInterval)
       // Ensure we have final state

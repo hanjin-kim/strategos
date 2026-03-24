@@ -189,7 +189,10 @@ def start_simulation(sim_id: str):
         try:
             if "turn_loop" in sim:
                 # Business/non-military domain
-                sim["turn_loop"].run_simulation(max_turns=max_turns)
+                loop = sim["turn_loop"]
+                loop.run_simulation(max_turns=max_turns)
+                with sim["lock"]:
+                    sim["current_turn"] = loop.state.turn if hasattr(loop.state, "turn") else max_turns
                 sim["status"] = "completed"
             else:
                 # Military domain
