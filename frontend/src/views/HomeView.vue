@@ -32,7 +32,7 @@
           @click="launchScenario(scenario)"
         >
           <div class="scenario-header">
-            <span class="scenario-name">{{ scenario.name }}</span>
+            <span class="scenario-name">{{ scenario.display_name || scenario.name }}</span>
             <span
               class="domain-badge"
               :class="scenario.domain === 'business' ? 'domain-business' : 'domain-military'"

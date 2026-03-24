@@ -8,8 +8,8 @@ import BusinessSimulationView from '../views/BusinessSimulationView.vue'
 const routes = [
   { path: '/', name: 'home', component: HomeView },
   { path: '/setup', name: 'setup', component: ScenarioSetupView },
-  { path: '/simulation/:id', name: 'simulation', component: SimulationView, props: true },
   { path: '/simulation/business/:id', name: 'business-simulation', component: BusinessSimulationView },
+  { path: '/simulation/:id', name: 'simulation', component: SimulationView, props: true },
   { path: '/batch', name: 'batch', component: BatchView },
 ]
 
