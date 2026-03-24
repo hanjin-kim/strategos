@@ -42,7 +42,12 @@ onMounted(() => store.loadScenarios())
 async function startSim() {
   await store.createAndStart(selected.value, maxTurns.value)
   if (store.currentSimulationId) {
-    router.push({ name: 'simulation', params: { id: store.currentSimulationId } })
+    const scenario = store.scenarios.find(s => s.name === selected.value)
+    if (scenario && scenario.domain === 'business') {
+      router.push({ name: 'business-simulation', params: { id: store.currentSimulationId } })
+    } else {
+      router.push({ name: 'simulation', params: { id: store.currentSimulationId } })
+    }
   }
 }
 </script>
