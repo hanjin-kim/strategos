@@ -66,14 +66,12 @@ onMounted(async () => {
 async function launchScenario(scenario) {
   try {
     const { simulation_id } = await createSimulation(scenario.name)
-    await startSimulation(simulation_id)
     if (scenario.domain === 'business') {
       router.push({ name: 'business-simulation', params: { id: simulation_id } })
     } else {
       router.push({ name: 'simulation', params: { id: simulation_id } })
     }
   } catch (e) {
-    // fall back to setup page on error
     router.push('/setup')
   }
 }

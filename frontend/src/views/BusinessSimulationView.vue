@@ -3,6 +3,9 @@
     <header class="sim-header">
       <h1>{{ scenarioName || 'Business Simulation' }}</h1>
       <div class="header-controls">
+        <button v-if="status === 'created'" class="start-btn" @click="startSim">
+          Start Simulation
+        </button>
         <span class="turn-badge">Turn {{ turn }}/{{ maxTurns }}</span>
         <span class="phase-badge">{{ phase }}</span>
         <span class="status-badge" :class="'status-' + status">{{ status }}</span>
@@ -45,7 +48,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { getSimulationState, getSimulationStatus } from '../api/client'
+import { getSimulationState, getSimulationStatus, startSimulation } from '../api/client'
 import MarketGraph from '../components/Business/MarketGraph.vue'
 import BusinessUnitCard from '../components/Business/BusinessUnitCard.vue'
 
@@ -94,6 +97,20 @@ function sideColor(side) {
 
 let pollInterval = null
 
+async function startSim() {
+  try {
+    await startSimulation(simId.value, maxTurns.value || 24)
+    status.value = 'running'
+    // Start polling
+    pollInterval = setInterval(() => {
+      fetchState()
+      fetchStatus()
+    }, 2000)
+  } catch (e) {
+    status.value = 'error'
+  }
+}
+
 async function fetchState() {
   try {
     const data = await getSimulationState(simId.value)
@@ -123,13 +140,12 @@ async function fetchStatus() {
 }
 
 onMounted(async () => {
-  // Fetch state first, then status (state may already be complete)
   await fetchState()
   await fetchStatus()
-  pollInterval = setInterval(() => {
-    fetchState()
-    fetchStatus()
-  }, 2000)
+  // If already running/completed (e.g. page refresh), poll
+  if (status.value === 'running') {
+    pollInterval = setInterval(() => { fetchState(); fetchStatus() }, 2000)
+  }
 })
 
 onUnmounted(() => {
@@ -189,6 +205,8 @@ h1 { font-size: 20px; color: #4cc9f0; }
 }
 .narrative-section h3 { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 .narrative-section p { font-size: 12px; line-height: 1.5; color: #cbd5e1; }
+.start-btn { padding: 6px 16px; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 13px; }
+.start-btn:hover { background: #1d4ed8; }
 .status-badge { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
 .status-completed { background: #166534; color: #4ade80; }
 .status-running { background: #1e40af; color: #60a5fa; }
