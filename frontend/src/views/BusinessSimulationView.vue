@@ -5,6 +5,7 @@
       <div class="header-controls">
         <span class="turn-badge">Turn {{ turn }}</span>
         <span class="phase-badge">{{ phase }}</span>
+        <span class="status-badge" :class="'status-' + status">{{ status }}</span>
       </div>
     </header>
 
@@ -52,6 +53,7 @@ const route = useRoute()
 const simId = computed(() => route.params.id)
 
 const state = ref({})
+const status = ref('loading')
 const turn = ref(0)
 const phase = ref('')
 const narrative = ref('')
@@ -106,21 +108,26 @@ async function fetchState() {
 async function fetchStatus() {
   try {
     const data = await getSimulationStatus(simId.value)
-    if (data.status === 'completed' || data.status === 'stopped') {
+    status.value = data.status || 'unknown'
+    if (data.scenario_name) scenarioName.value = data.scenario_name
+    if (data.status === 'completed' || data.status === 'stopped' || data.status === 'error') {
       clearInterval(pollInterval)
+      // Ensure we have final state
+      await fetchState()
     }
   } catch (e) {
     // silently ignore polling errors
   }
 }
 
-onMounted(() => {
-  fetchState()
-  fetchStatus()
+onMounted(async () => {
+  // Fetch state first, then status (state may already be complete)
+  await fetchState()
+  await fetchStatus()
   pollInterval = setInterval(() => {
     fetchState()
     fetchStatus()
-  }, 3000)
+  }, 2000)
 })
 
 onUnmounted(() => {
@@ -180,4 +187,9 @@ h1 { font-size: 20px; color: #4cc9f0; }
 }
 .narrative-section h3 { font-size: 13px; color: #94a3b8; margin-bottom: 4px; }
 .narrative-section p { font-size: 12px; line-height: 1.5; color: #cbd5e1; }
+.status-badge { padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.status-completed { background: #166534; color: #4ade80; }
+.status-running { background: #1e40af; color: #60a5fa; }
+.status-loading { background: #1e293b; color: #94a3b8; }
+.status-error { background: #7f1d1d; color: #fca5a5; }
 </style>
