@@ -54,9 +54,8 @@ class BusinessDomainFactory:
                 pass
 
         doctrine = (
-            params.get("doctrine_override", BUSINESS_DOCTRINE)
-            if params else BUSINESS_DOCTRINE
-        )
+            params.get("doctrine_override") or BUSINESS_DOCTRINE
+        ) if params else BUSINESS_DOCTRINE
 
         agents: dict = {}
         for cmd_id, cmd_data in state.commanders.items():

@@ -80,7 +80,7 @@ class BusinessAgent:
         if self._cached_system_prompt is not None:
             return self._cached_system_prompt
 
-        l1 = self._doctrine
+        l1 = self._doctrine or ""
         l2 = self._build_persona()
 
         # L2 market structure (doesn't change within a simulation)
