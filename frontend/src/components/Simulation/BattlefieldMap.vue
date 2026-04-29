@@ -1,6 +1,6 @@
 <template>
   <div class="battlefield" ref="container">
-    <svg :viewBox="viewBox" class="hex-svg" @wheel.prevent="onZoom" @mousedown="onPanStart" @mousemove="onPanMove" @mouseup="onPanEnd">
+    <svg :viewBox="viewBox" class="hex-svg" @wheel.prevent="onZoom" @mousedown="onPanStart" @mousemove="onPanMove" @mouseup="onPanEnd" @contextmenu.prevent>
       <g :transform="`translate(${panX},${panY}) scale(${zoom})`">
         <!-- Terrain hexes -->
         <g v-for="(hex, key) in terrainMap" :key="key">
@@ -9,7 +9,9 @@
             :fill="terrainColor(hex.terrain_type)"
             stroke="#2a2a4a"
             stroke-width="0.5"
-            @click="selectHex(hex)"
+            :class="{ 'hex-clickable': interactive }"
+            @click="onHexClick(hex)"
+            @contextmenu.prevent="onHexRightClick(hex)"
           />
           <text
             v-if="hex.name"
@@ -20,10 +22,26 @@
             :font-size="hexSize * 0.25"
           >{{ hex.name }}</text>
         </g>
+
+        <!-- Movement overlay (reachable hexes) -->
+        <MovementOverlay :hexPoints="hexPoints" />
+
+        <!-- Command arrows (pending commands) -->
+        <CommandArrow :hexCenter="hexCenter" />
+
         <!-- Unit markers -->
         <g v-for="unit in unitList" :key="unit.id">
-          <UnitMarker :unit="unit" :center="hexCenter(unit.position.q, unit.position.r)" :size="hexSize * 0.6" />
+          <UnitMarker
+            :unit="unit"
+            :center="hexCenter(unit.position.q, unit.position.r)"
+            :size="hexSize * 0.6"
+            :selected="store.selectedUnit?.id === unit.id"
+            :hasPending="!!store.pendingCommandForUnit(unit.id)"
+            :isPlayerUnit="interactive && unit.side === store.playerSide"
+            @click.stop="onUnitClick(unit)"
+          />
         </g>
+
         <!-- Phase 2 overlays -->
         <FogOverlay
           :hexToPixelX="(h) => hexCenter(h.q, h.r).x"
@@ -44,7 +62,7 @@
       </g>
     </svg>
     <!-- Selected hex info -->
-    <div v-if="selectedHex" class="hex-info">
+    <div v-if="selectedHex && !interactive" class="hex-info">
       <strong>{{ selectedHex.name || `(${selectedHex.coord.q}, ${selectedHex.coord.r})` }}</strong>
       <span>{{ selectedHex.terrain_type }} | Elev: {{ selectedHex.elevation }}m</span>
       <div v-for="u in unitsAtSelected" :key="u.id" class="unit-info">
@@ -61,6 +79,12 @@ import UnitMarker from './UnitMarker.vue'
 import FogOverlay from './FogOverlay.vue'
 import SupplyOverlay from './SupplyOverlay.vue'
 import AirMissionMarker from './AirMissionMarker.vue'
+import MovementOverlay from './MovementOverlay.vue'
+import CommandArrow from './CommandArrow.vue'
+
+const props = defineProps({
+  interactive: { type: Boolean, default: false },
+})
 
 const store = useSimulationStore()
 const hexSize = 30
@@ -73,17 +97,16 @@ const selectedHex = ref(null)
 
 const terrainMap = computed(() => store.terrain)
 const unitList = computed(() => store.units.filter(u => u.status !== 'DESTROYED'))
-
 const viewBox = computed(() => `0 0 800 600`)
 
 const TERRAIN_COLORS = {
-  PLAIN: '#3a5a40',
-  MOUNTAIN: '#6b4423',
-  URBAN: '#555566',
-  FOREST: '#2d4a22',
-  RIVER: '#1e6091',
-  WATER: '#0a3055',
-  BRIDGE: '#8a7a5a',
+  PLAIN: '#2a4a32',
+  MOUNTAIN: '#5a3a1a',
+  URBAN: '#3d3d4f',
+  FOREST: '#1e3a1a',
+  RIVER: '#164870',
+  WATER: '#0a2a48',
+  BRIDGE: '#6a5a3a',
 }
 
 function terrainColor(type) { return TERRAIN_COLORS[type] || '#3a5a40' }
@@ -104,7 +127,73 @@ function hexPoints(q, r) {
   return points.join(' ')
 }
 
-function selectHex(hex) { selectedHex.value = hex }
+function onUnitClick(unit) {
+  if (!props.interactive) return
+  if (unit.side === store.playerSide) {
+    store.selectUnit(unit)
+  } else if (store.selectedUnit) {
+    issueAttackCommand(unit)
+  }
+}
+
+function onHexClick(hex) {
+  if (!props.interactive) {
+    selectedHex.value = hex
+    return
+  }
+
+  if (!store.selectedUnit) {
+    selectedHex.value = hex
+    return
+  }
+
+  const hexKey = `${hex.coord.q},${hex.coord.r}`
+  const unitsHere = store.unitsByHex[hexKey] || []
+  const enemyHere = unitsHere.find(u => u.side !== store.playerSide && u.status !== 'DESTROYED')
+
+  if (store.commandIntent === 'ATTACK' && enemyHere) {
+    issueAttackCommand(enemyHere)
+  } else if (store.reachableHexes.has(hexKey)) {
+    issueMoveCommand(hex.coord)
+  } else {
+    store.selectUnit(null)
+    selectedHex.value = hex
+  }
+}
+
+function onHexRightClick(hex) {
+  if (!props.interactive || !store.selectedUnit) return
+  const hexKey = `${hex.coord.q},${hex.coord.r}`
+  const unitsHere = store.unitsByHex[hexKey] || []
+  const enemyHere = unitsHere.find(u => u.side !== store.playerSide && u.status !== 'DESTROYED')
+
+  if (enemyHere) {
+    issueAttackCommand(enemyHere)
+  } else if (store.reachableHexes.has(hexKey)) {
+    issueMoveCommand(hex.coord)
+  }
+}
+
+function issueMoveCommand(coord) {
+  store.addCommand({
+    type: 'action',
+    unit_id: store.selectedUnit.id,
+    action_type: 'MOVE',
+    target_hex: { q: coord.q, r: coord.r },
+  })
+  store.selectUnit(null)
+}
+
+function issueAttackCommand(targetUnit) {
+  store.addCommand({
+    type: 'action',
+    unit_id: store.selectedUnit.id,
+    action_type: 'ATTACK',
+    target_unit_id: targetUnit.id,
+    target_hex: { q: targetUnit.position.q, r: targetUnit.position.r },
+  })
+  store.selectUnit(null)
+}
 
 const unitsAtSelected = computed(() => {
   if (!selectedHex.value) return []
@@ -132,10 +221,19 @@ function unitPosition(unitId) {
 
 <style scoped>
 .battlefield { position: relative; width: 100%; height: 100%; }
-.hex-svg { width: 100%; height: 100%; background: #0d1117; cursor: grab; }
+.hex-svg { width: 100%; height: 100%; background: #080c14; cursor: grab; }
 .hex-svg:active { cursor: grabbing; }
-polygon { cursor: pointer; transition: opacity 0.15s; }
-polygon:hover { opacity: 0.8; }
-.hex-info { position: absolute; bottom: 1rem; left: 1rem; background: rgba(22, 33, 62, 0.95); padding: 0.75rem 1rem; border-radius: 6px; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; border: 1px solid #0f3460; }
-.unit-info { color: #4cc9f0; font-size: 0.8rem; }
+polygon { transition: opacity 0.15s; }
+polygon:hover { opacity: 0.85; }
+.hex-clickable { cursor: pointer; }
+.hex-info {
+  position: absolute; bottom: 0.75rem; left: 0.75rem;
+  background: rgba(26, 34, 53, 0.92); backdrop-filter: blur(8px);
+  padding: 0.6rem 0.85rem; border-radius: var(--radius-sm);
+  display: flex; flex-direction: column; gap: 0.2rem;
+  font-size: 0.78rem; border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.hex-info strong { color: var(--text-primary); font-size: 0.82rem; }
+.unit-info { color: var(--accent); font-size: 0.75rem; }
 </style>

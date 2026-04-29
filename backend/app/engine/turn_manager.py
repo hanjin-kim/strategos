@@ -22,6 +22,8 @@ from app.models.air import AirMission, AirMissionType, SortiePool
 from app.graph.relationship_graph import RelationshipGraph
 from app.memory.replay_store import ReplayStore
 from app.agents.adjudicator import Adjudicator
+from app.engine.human_commander import HumanCommander
+from app.models.game_config import CommandMode
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,7 @@ class TurnManager:
         self.simulation_id = simulation_id
         self.log_dir = log_dir
         self._turn_results: list[TurnResult] = []
+        self.human_commander: HumanCommander | None = None
 
     def run_simulation(
         self,
@@ -84,6 +87,80 @@ class TurnManager:
                     logger.warning("Audit warning at turn %d: %s", turn, w)
 
         return self.game_state
+
+    def step_turn(self) -> TurnResult:
+        """Execute exactly one turn synchronously. Used for player-interactive mode."""
+        turn = self.game_state.turn + 1
+        turn_result = self._run_turn(turn)
+        self._turn_results.append(turn_result)
+
+        if self.human_commander:
+            self.human_commander.clear_pending()
+
+        return turn_result
+
+    def get_available_actions(self) -> dict:
+        """Return valid actions for the player's units, filtered by fog of war."""
+        if not self.human_commander:
+            return {"units": [], "command_mode": None}
+
+        player_side = Side(self.human_commander.side)
+        player_units = [
+            u for u in self.game_state.get_units_by_side(player_side)
+            if u.status not in (UnitStatus.DESTROYED, UnitStatus.ROUTED)
+        ]
+
+        from app.utils.hex_grid import hex_reachable, hex_neighbors
+
+        blocked_hexes = set()
+        for u in self.game_state.units.values():
+            if u.side == player_side and u.status != UnitStatus.DESTROYED:
+                blocked_hexes.add(u.position)
+
+        units_data = []
+        for unit in player_units:
+            own_blocked = blocked_hexes - {unit.position}
+            reachable = hex_reachable(
+                unit.position,
+                unit.movement_points,
+                self.game_state.terrain,
+                blocked=own_blocked,
+            )
+            reachable.discard(unit.position)
+
+            adjacent_enemies = self.game_state.get_adjacent_enemies(unit.id)
+            attack_targets = [
+                {"unit_id": e.id, "name": e.name, "position": {"q": e.position.q, "r": e.position.r}}
+                for e in adjacent_enemies
+            ]
+
+            actions = []
+            if reachable:
+                actions.append({
+                    "type": "MOVE",
+                    "valid_hexes": [{"q": h.q, "r": h.r} for h in reachable],
+                })
+            if attack_targets:
+                actions.append({"type": "ATTACK", "valid_targets": attack_targets})
+            actions.append({"type": "DEFEND"})
+            actions.append({"type": "HOLD"})
+
+            units_data.append({
+                "unit_id": unit.id,
+                "name": unit.name,
+                "position": {"q": unit.position.q, "r": unit.position.r},
+                "strength": unit.strength,
+                "movement_points": unit.movement_points,
+                "available_actions": actions,
+            })
+
+        mode = self.human_commander.command_mode.value
+        return {
+            "units": units_data,
+            "command_mode": mode,
+            "can_issue_orders": mode in ("STRATEGIC", "HYBRID"),
+            "can_issue_actions": mode in ("TACTICAL", "HYBRID"),
+        }
 
     def _run_turn(self, turn: int) -> TurnResult:
         """Execute one complete turn (3 phases)."""
@@ -151,8 +228,11 @@ class TurnManager:
         # Log turn
         self._log_turn(self.game_state.turn, all_actions, combats)
 
-        # Generate narrative (optional)
+        # Generate narrative + dialogue (optional)
         narrative_text = ""
+        enemy_dialogue: list[dict] = []
+        staff_briefing = ""
+        event_reactions: list[str] = []
         if self.adjudicator:
             turn_result_temp = TurnResult(
                 turn=self.game_state.turn,
@@ -165,8 +245,14 @@ class TurnManager:
                 combats=combats,
                 destroyed_units=destroyed,
             )
-            narrative = self.adjudicator.generate_narrative(turn_result_temp, self.game_state)
+            player_side = self.human_commander.side if self.human_commander else None
+            narrative = self.adjudicator.generate_narrative(
+                turn_result_temp, self.game_state, player_side=player_side,
+            )
             narrative_text = narrative.summary
+            enemy_dialogue = narrative.enemy_dialogue
+            staff_briefing = narrative.staff_briefing
+            event_reactions = narrative.event_reactions
 
         return TurnResult(
             turn=self.game_state.turn,
@@ -179,6 +265,9 @@ class TurnManager:
             combats=combats,
             destroyed_units=destroyed,
             narrative=narrative_text,
+            enemy_dialogue=enemy_dialogue,
+            staff_briefing=staff_briefing,
+            event_reactions=event_reactions,
         )
 
     def _call_agents_parallel(self, agents_to_call: list, game_state) -> list:
@@ -212,13 +301,27 @@ class TurnManager:
 
         If no DivisionCommanders exist for a side, falls back to:
           Theater -> Battalion (Phase 1 behavior).
+
+        When a HumanCommander is set, the player's side uses submitted commands:
+          STRATEGIC: player OrderDirectives replace theater output
+          TACTICAL: player MilitaryActions replace battalion output
+          HYBRID: player OrderDirectives replace theater + MilitaryActions override battalions
         """
         all_actions: list[MilitaryAction] = []
 
+        player_side = Side(self.human_commander.side) if self.human_commander else None
+        player_mode = self.human_commander.command_mode if self.human_commander else None
+
         # Step 1: Theater commanders (parallel across sides)
+        # In STRATEGIC/HYBRID, skip AI theater for the player's side
         theater_agents = [
             agent for agent in self.agents.values()
             if isinstance(agent, TheaterCommander)
+            and not (
+                player_side
+                and agent.commander.side == player_side
+                and player_mode in (CommandMode.STRATEGIC, CommandMode.HYBRID)
+            )
         ]
         theater_results = self._call_agents_parallel(theater_agents, self.game_state)
 
@@ -232,6 +335,12 @@ class TurnManager:
             if issuer:
                 side_val = issuer.commander.side.value
                 theater_orders_by_side.setdefault(side_val, []).append(order)
+
+        # Inject player strategic orders
+        if self.human_commander and player_mode in (CommandMode.STRATEGIC, CommandMode.HYBRID):
+            theater_orders_by_side.setdefault(player_side.value, []).extend(
+                self.human_commander.get_pending_orders()
+            )
 
         # Step 2: Distribute theater orders and prepare division/battalion agents
         for side in [Side.BLUE, Side.RED]:
@@ -270,11 +379,30 @@ class TurnManager:
                     self.agents[bn_cmd_id].receive_orders(order)
 
         # Step 4: Battalion commanders (parallel — biggest speedup)
+        # In TACTICAL mode, skip AI battalions for the player's side
         battalion_agents = [
             agent for agent in self.agents.values()
             if isinstance(agent, BattalionCommander)
+            and not (
+                player_side
+                and agent.commander.side == player_side
+                and player_mode == CommandMode.TACTICAL
+            )
         ]
         bn_actions = self._call_agents_parallel(battalion_agents, self.game_state)
+
+        # Inject player tactical commands
+        if self.human_commander:
+            player_actions = self.human_commander.get_pending_actions()
+            if player_mode == CommandMode.TACTICAL:
+                bn_actions.extend(player_actions)
+            elif player_mode == CommandMode.HYBRID and player_actions:
+                overridden_units = {a.unit_id for a in player_actions}
+                bn_actions = [
+                    a for a in bn_actions
+                    if not (self._get_action_side(a) == player_side and a.unit_id in overridden_units)
+                ]
+                bn_actions.extend(player_actions)
 
         # Step 5: Validate per side
         for side in [Side.BLUE, Side.RED]:

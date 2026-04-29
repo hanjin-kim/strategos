@@ -5,6 +5,7 @@ from openai import OpenAI
 from app.models.narrative import TurnNarrative
 from app.models.simulation import TurnResult
 from app.models.domain import Side, UnitStatus
+from app.narrative.dialogue_generator import DialogueGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -19,28 +20,54 @@ class Adjudicator:
         base_url = llm_config.get("base_url", "")
         if api_key:
             self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._dialogue_generator: DialogueGenerator | None = None
 
-    def generate_narrative(self, turn_result: TurnResult, game_state) -> TurnNarrative:
-        """Generate narrative for a completed turn."""
+    def set_dialogue_generator(self, player_side: str, scenario: str = "korean_peninsula") -> None:
+        llm_cfg = {"api_key": "", "base_url": "", "model": self._model}
+        if self._client:
+            llm_cfg["api_key"] = self._client.api_key
+            llm_cfg["base_url"] = str(self._client.base_url)
+        self._dialogue_generator = DialogueGenerator(llm_cfg)
+        self._dialogue_generator.set_personalities(player_side, scenario)
+
+    def generate_narrative(
+        self, turn_result: TurnResult, game_state, player_side: str | None = None,
+    ) -> TurnNarrative:
+        """Generate narrative + dialogue for a completed turn."""
         if self._client is None:
-            return self._fallback_narrative(turn_result, game_state)
+            narrative = self._fallback_narrative(turn_result, game_state)
+        else:
+            prompt = self._build_narrative_prompt(turn_result, game_state)
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[
+                        {"role": "system", "content": self._system_prompt()},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.7,
+                    max_tokens=1024,
+                )
+                text = response.choices[0].message.content
+                narrative = self._parse_narrative(text, turn_result.turn)
+            except Exception as e:
+                logger.warning("Adjudicator LLM call failed: %s", e)
+                narrative = self._fallback_narrative(turn_result, game_state)
 
-        prompt = self._build_narrative_prompt(turn_result, game_state)
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": self._system_prompt()},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.7,
-                max_tokens=1024,
-            )
-            text = response.choices[0].message.content
-            return self._parse_narrative(text, turn_result.turn)
-        except Exception as e:
-            logger.warning("Adjudicator LLM call failed: %s", e)
-            return self._fallback_narrative(turn_result, game_state)
+        if self._dialogue_generator and player_side:
+            try:
+                dialogue = self._dialogue_generator.generate_dialogue(
+                    turn_result, game_state, player_side,
+                )
+                narrative = narrative.model_copy(update={
+                    "enemy_dialogue": dialogue.get("enemy_dialogue", []),
+                    "staff_briefing": dialogue.get("staff_briefing", ""),
+                    "event_reactions": dialogue.get("event_reactions", []),
+                })
+            except Exception as e:
+                logger.warning("Dialogue generation failed: %s", e)
+
+        return narrative
 
     def _system_prompt(self) -> str:
         return (

@@ -20,6 +20,23 @@ DOCTRINE_PROMPT = """## MILITARY DOCTRINE
 - Protect supply lines and maintain unit cohesion.
 """
 
+DIFFICULTY_DOCTRINE = {
+    "EASY": (
+        "\n## COMMANDER TEMPERAMENT\n"
+        "You are a cautious, risk-averse commander. Prefer defensive postures.\n"
+        "Avoid attacks unless you have overwhelming superiority (3:1 or better).\n"
+        "Occasionally overlook flanking opportunities. Retreat early when under pressure.\n"
+    ),
+    "MEDIUM": "",
+    "HARD": (
+        "\n## COMMANDER TEMPERAMENT\n"
+        "You are a ruthless, calculating commander who exploits every weakness.\n"
+        "Coordinate attacks across multiple axes. Prioritize concentration of force.\n"
+        "Cut supply lines when possible. Press advantages aggressively.\n"
+        "Identify and exploit gaps in enemy lines. Never waste a turn.\n"
+    ),
+}
+
 
 class BaseCommander:
     """Base class for all commander agents. OODA loop + graph queries + rolling memory."""
@@ -29,11 +46,12 @@ class BaseCommander:
     def __init__(
         self,
         commander: Commander,
-        llm_config: dict,  # {"api_key", "base_url", "model", "temperature"}
+        llm_config: dict,
         graph_tools: GraphTools | None = None,
         memory_window: int = 10,
         intel_engine=None,
         doctrine_override: str | None = None,
+        difficulty: str = "MEDIUM",
     ):
         self.commander = commander
         self.memory = RollingMemory(window=memory_window)
@@ -44,6 +62,7 @@ class BaseCommander:
         self._fallback_mode = False
         self._cached_system_prompt: str | None = None
         self._doctrine_override = doctrine_override
+        self._difficulty = difficulty
         self._client = None
         self._model = llm_config.get("model", "qwen-plus")
         self._temperature = llm_config.get("temperature", 0.0)
@@ -228,12 +247,13 @@ class BaseCommander:
         return f"You are {self.commander.name}, a {self.commander.rank} commander for {self.commander.side.value} force."
 
     def _build_cached_system_prompt(self) -> str:
-        """Build system prompt from L1 (doctrine) + L2 (scenario). Called once at first use, then cached."""
+        """Build system prompt from L1 (doctrine) + L2 (scenario) + difficulty layer."""
         if self._cached_system_prompt is not None:
             return self._cached_system_prompt
         doctrine = self._doctrine_override if self._doctrine_override is not None else DOCTRINE_PROMPT
         persona = self._build_persona()
-        self._cached_system_prompt = doctrine + "\n" + persona
+        diff_extra = DIFFICULTY_DOCTRINE.get(self._difficulty, "")
+        self._cached_system_prompt = doctrine + "\n" + persona + diff_extra
         return self._cached_system_prompt
 
     def invalidate_cache(self) -> None:

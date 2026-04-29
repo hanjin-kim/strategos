@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: .
+      target: backend
+    ports:
+      - "5001:5001"
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://dashscope-intl.aliyuncs.com/compatible-mode/v1}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-qwen-plus}
+      - SGLANG_BASE_URL=${SGLANG_BASE_URL:-}
+      - SGLANG_MODEL_NAME=${SGLANG_MODEL_NAME:-}
+      - DB_PATH=data/wargame.db
+      - LOG_DIR=data/logs
+    volumes:
+      - wargame-data:/app/backend/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/scenarios/')"]
+      interval: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      target: frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  wargame-data:

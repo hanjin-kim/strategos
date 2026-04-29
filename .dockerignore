@@ -1,0 +1,13 @@
+.git
+.venv
+backend/.venv
+backend/.pytest_cache
+backend/data
+frontend/node_modules
+.omc
+.claude
+.DS_Store
+*.db
+*.pyc
+__pycache__
+.env

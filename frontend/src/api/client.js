@@ -12,8 +12,26 @@ export async function getScenario(name) {
   return data
 }
 
-export async function createSimulation(scenarioName) {
-  const { data } = await api.post('/simulations', { scenario_name: scenarioName })
+export async function createSimulation(scenarioName, gameConfig = {}) {
+  const { data } = await api.post('/simulations/', {
+    scenario_name: scenarioName,
+    ...gameConfig,
+  })
+  return data
+}
+
+export async function submitCommands(simId, { orders = [], actions = [] }) {
+  const { data } = await api.post(`/simulations/${simId}/commands`, { orders, actions })
+  return data
+}
+
+export async function stepTurn(simId) {
+  const { data } = await api.post(`/simulations/${simId}/step`)
+  return data
+}
+
+export async function getAvailableActions(simId) {
+  const { data } = await api.get(`/simulations/${simId}/available-actions`)
   return data
 }
 

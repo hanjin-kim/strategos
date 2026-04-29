@@ -21,6 +21,10 @@ from app.graph.relationship_graph import RelationshipGraph
 from app.graph.graph_tools import GraphTools
 from app.memory.replay_store import ReplayStore
 from app.config import Settings
+from app.models.game_config import GameConfig, CommandMode, FogMode, AIDifficulty
+from app.models.actions import MilitaryAction, ActionType, OrderDirective, MissionType
+from app.models.domain import HexCoord, Side
+from app.engine.human_commander import HumanCommander
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +43,14 @@ def _load_scenario(name: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _create_agents(game_state: GameState, scenario_data: dict, llm_config: dict, graph_tools: GraphTools | None) -> dict:
+def _create_agents(
+    game_state: GameState,
+    scenario_data: dict,
+    llm_config: dict,
+    graph_tools: GraphTools | None,
+    memory_window: int = 10,
+    difficulty: str = "MEDIUM",
+) -> dict:
     """Create all commander agents from scenario data."""
     agents = {}
     for side_str, force_data in scenario_data.get("forces", {}).items():
@@ -49,13 +60,36 @@ def _create_agents(game_state: GameState, scenario_data: dict, llm_config: dict,
                 continue
             if commander.rank == "Theater":
                 agents[commander.id] = TheaterCommander(
-                    commander=commander, llm_config=llm_config, graph_tools=graph_tools
+                    commander=commander, llm_config=llm_config,
+                    graph_tools=graph_tools, memory_window=memory_window,
+                    difficulty=difficulty,
                 )
             else:
                 agents[commander.id] = BattalionCommander(
-                    commander=commander, llm_config=llm_config, graph_tools=graph_tools
+                    commander=commander, llm_config=llm_config,
+                    graph_tools=graph_tools, memory_window=memory_window,
+                    difficulty=difficulty,
                 )
     return agents
+
+
+def _build_game_config(data: dict) -> GameConfig:
+    """Parse game config from request data."""
+    return GameConfig(
+        player_side=data.get("player_side"),
+        command_mode=CommandMode(data.get("command_mode", "HYBRID")),
+        fog_mode=FogMode(data.get("fog_mode", "SOFT")),
+        ai_difficulty=AIDifficulty(data.get("ai_difficulty", "MEDIUM")),
+    )
+
+
+def _difficulty_llm_overrides(difficulty: AIDifficulty) -> dict:
+    """Return LLM config overrides based on difficulty."""
+    if difficulty == AIDifficulty.EASY:
+        return {"use_llm": False}
+    if difficulty == AIDifficulty.HARD:
+        return {"temperature": 0.0, "memory_window": 15}
+    return {"temperature": 0.3, "memory_window": 5}
 
 
 @simulation_bp.route("/", methods=["POST"])
@@ -71,6 +105,7 @@ def create_simulation():
 
     sim_id = str(uuid.uuid4())
     domain = scenario_data.get("domain", "military")
+    game_config = _build_game_config(data)
 
     settings = Settings()
     db_path = str(Path(settings.DB_PATH).parent / f"sim_{sim_id}.db")
@@ -124,22 +159,29 @@ def create_simulation():
     rel_graph.load_from_scenario(scenario_data, game_state)
     graph_tools = GraphTools(rel_graph)
 
-    # Create agents
-    llm_config = {
-        "api_key": settings.LLM_API_KEY,
-        "base_url": settings.LLM_BASE_URL,
-        "model": settings.LLM_MODEL_NAME,
-        "temperature": 0.0,
-    }
-    agents = _create_agents(game_state, scenario_data, llm_config, graph_tools)
+    # Create agents with difficulty-aware config
+    llm_config = settings.get_llm_config()
+    diff_overrides = _difficulty_llm_overrides(game_config.ai_difficulty)
+    if not diff_overrides.get("use_llm", True):
+        llm_config = {**llm_config, "api_key": ""}
+    else:
+        llm_config = {**llm_config, "temperature": diff_overrides.get("temperature", 0.0)}
+
+    agents = _create_agents(
+        game_state, scenario_data, llm_config, graph_tools,
+        memory_window=diff_overrides.get("memory_window", 10),
+        difficulty=game_config.ai_difficulty.value,
+    )
 
     # Create Phase 2 engines
     intel_engine = IntelEngine()
     supply_engine = SupplyEngine()
     air_engine = AirEngine()
     adjudicator = None
-    if settings.LLM_API_KEY:
+    if llm_config.get("api_key"):
         adjudicator = Adjudicator(llm_config)
+        if game_config.player_side:
+            adjudicator.set_dialogue_generator(game_config.player_side, scenario_name)
 
     # Create turn manager
     turn_manager = TurnManager(
@@ -158,6 +200,15 @@ def create_simulation():
         log_dir=settings.LOG_DIR,
     )
 
+    # Wire up human commander for player mode
+    human_commander = None
+    if game_config.player_side:
+        human_commander = HumanCommander(
+            side=game_config.player_side,
+            command_mode=game_config.command_mode,
+        )
+        turn_manager.human_commander = human_commander
+
     _simulations[sim_id] = {
         "turn_manager": turn_manager,
         "game_state": game_state,
@@ -167,9 +218,18 @@ def create_simulation():
         "scenario_name": scenario_name,
         "domain": "military",
         "max_turns": scenario_data.get("config", {}).get("max_turns", 72),
+        "game_config": game_config,
+        "human_commander": human_commander,
     }
 
-    return jsonify({"simulation_id": sim_id, "status": "created", "domain": "military"}), 201
+    mode = "player" if game_config.player_side else "observer"
+    return jsonify({
+        "simulation_id": sim_id,
+        "status": "created",
+        "domain": "military",
+        "mode": mode,
+        "game_config": game_config.model_dump(),
+    }), 201
 
 
 @simulation_bp.route("/<sim_id>/start", methods=["POST"])
@@ -221,12 +281,15 @@ def get_status(sim_id: str):
     if not sim:
         return jsonify({"error": "Simulation not found"}), 404
 
+    gc = sim.get("game_config")
     result = {
         "simulation_id": sim_id,
         "status": sim["status"],
         "current_turn": sim.get("current_turn", 0),
         "max_turns": sim.get("max_turns", 72),
         "scenario_name": sim.get("scenario_name", ""),
+        "mode": "player" if (gc and gc.player_side) else "observer",
+        "game_config": gc.model_dump() if gc else None,
     }
     if sim.get("error"):
         result["error"] = sim["error"]
@@ -299,6 +362,131 @@ def get_log(sim_id: str):
 
     turns = replay_store.list_turns(sim_id)
     return jsonify({"turns": turns})
+
+
+@simulation_bp.route("/<sim_id>/commands", methods=["POST"])
+def submit_commands(sim_id: str):
+    """Submit player commands for the current turn."""
+    sim = _simulations.get(sim_id)
+    if not sim:
+        return jsonify({"error": "Simulation not found"}), 404
+
+    hc = sim.get("human_commander")
+    if not hc:
+        return jsonify({"error": "Not a player game (no player_side configured)"}), 400
+
+    data = request.get_json() or {}
+    orders_raw = data.get("orders", [])
+    actions_raw = data.get("actions", [])
+
+    # Parse OrderDirectives
+    orders = []
+    for o in orders_raw:
+        obj_hex = None
+        if o.get("objective_hex"):
+            obj_hex = HexCoord(q=o["objective_hex"]["q"], r=o["objective_hex"]["r"])
+        orders.append(OrderDirective(
+            order_id=o.get("order_id", str(uuid.uuid4())),
+            turn=sim["game_state"].turn + 1,
+            issuer_id=o.get("issuer_id", "PLAYER"),
+            target_unit_id=o["target_unit_id"],
+            mission=MissionType(o["mission"]),
+            objective_hex=obj_hex,
+            priority=o.get("priority", 3),
+            constraints=o.get("constraints", []),
+            reasoning=o.get("reasoning", "Player order"),
+        ))
+
+    # Parse MilitaryActions
+    actions = []
+    for a in actions_raw:
+        target_hex = None
+        if a.get("target_hex"):
+            target_hex = HexCoord(q=a["target_hex"]["q"], r=a["target_hex"]["r"])
+        actions.append(MilitaryAction(
+            action_id=a.get("action_id", str(uuid.uuid4())),
+            turn=sim["game_state"].turn + 1,
+            commander_id=a.get("commander_id", "PLAYER"),
+            unit_id=a["unit_id"],
+            action_type=ActionType(a["action_type"]),
+            target_hex=target_hex,
+            target_unit_id=a.get("target_unit_id"),
+            priority=a.get("priority", 3),
+            reasoning=a.get("reasoning", "Player action"),
+        ))
+
+    errors = hc.validate_commands(orders=orders, actions=actions)
+    if errors:
+        return jsonify({"error": "Invalid commands", "details": errors}), 400
+
+    if orders:
+        hc.submit_orders(orders)
+    if actions:
+        hc.submit_actions(actions)
+
+    return jsonify({
+        "accepted": True,
+        "orders_count": len(orders),
+        "actions_count": len(actions),
+    })
+
+
+@simulation_bp.route("/<sim_id>/step", methods=["POST"])
+def step_turn(sim_id: str):
+    """Advance exactly one turn synchronously. Returns turn result."""
+    sim = _simulations.get(sim_id)
+    if not sim:
+        return jsonify({"error": "Simulation not found"}), 404
+
+    if sim["status"] == "running":
+        return jsonify({"error": "Simulation is running in auto-play mode"}), 400
+
+    turn_manager = sim.get("turn_manager")
+    if not turn_manager:
+        return jsonify({"error": "Step mode not supported for this domain"}), 400
+
+    sim["status"] = "running"
+    try:
+        turn_result = turn_manager.step_turn()
+        victory = turn_manager._check_victory()
+        sim["current_turn"] = sim["game_state"].turn
+        sim["status"] = "completed" if victory else "waiting_for_commands"
+
+        return jsonify({
+            "turn": turn_result.turn,
+            "phase_results": {k.value: v for k, v in turn_result.phase_results.items()},
+            "movements": len(turn_result.movements),
+            "combats": len(turn_result.combats),
+            "destroyed_units": turn_result.destroyed_units,
+            "narrative": turn_result.narrative,
+            "enemy_dialogue": turn_result.enemy_dialogue,
+            "staff_briefing": turn_result.staff_briefing,
+            "event_reactions": turn_result.event_reactions,
+            "victory": victory,
+            "status": sim["status"],
+        })
+    except Exception as e:
+        logger.error("Step turn failed for %s: %s", sim_id, e)
+        sim["status"] = "error"
+        sim["error"] = str(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@simulation_bp.route("/<sim_id>/available-actions", methods=["GET"])
+def get_available_actions(sim_id: str):
+    """Return valid actions for the player's units."""
+    sim = _simulations.get(sim_id)
+    if not sim:
+        return jsonify({"error": "Simulation not found"}), 404
+
+    turn_manager = sim.get("turn_manager")
+    if not turn_manager:
+        return jsonify({"error": "Not supported for this domain"}), 400
+
+    if not turn_manager.human_commander:
+        return jsonify({"error": "Not a player game"}), 400
+
+    return jsonify(turn_manager.get_available_actions())
 
 
 @simulation_bp.route("/<sim_id>/stop", methods=["POST"])
