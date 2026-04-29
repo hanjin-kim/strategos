@@ -108,7 +108,51 @@ docker compose up --build
 
 Open http://localhost:8080.
 
-> The game works without any LLM configured — agents fall back to rule-based AI. Set `SGLANG_BASE_URL` for a local LLM server or `LLM_API_KEY` for a cloud provider to enable LLM-powered commanders and narrative generation.
+> The game works without any LLM configured — agents fall back to rule-based AI.
+
+## LLM Setup
+
+Strategos uses any **OpenAI-compatible API** for commander AI and narrative generation. Without an LLM, all agents use rule-based fallback (still fully playable).
+
+### Option 1: No LLM (default)
+
+No configuration needed. Commanders use rule-based heuristics (defend, attack nearest, retreat when weak). Narrative uses template-based reports. Good for testing and development.
+
+### Option 2: Local LLM server (recommended)
+
+Run a local model via [sGLang](https://github.com/sgl-project/sglang), [vLLM](https://github.com/vllm-project/vllm), or [Ollama](https://ollama.ai) with OpenAI-compatible API:
+
+```bash
+# Example: sGLang with Qwen 2.5
+python -m sglang.launch_server --model Qwen/Qwen2.5-32B-Instruct --port 8000
+
+# Then in .env:
+SGLANG_BASE_URL=http://localhost:8000/v1
+SGLANG_MODEL_NAME=default
+```
+
+Local inference means zero token cost — the game uses LLM calls aggressively for richer commander behavior and narrative.
+
+### Option 3: Cloud LLM provider
+
+Any OpenAI-compatible provider works (OpenAI, Anthropic via proxy, Dashscope, Together, etc.):
+
+```bash
+# In .env:
+LLM_API_KEY=sk-your-key-here
+LLM_BASE_URL=https://api.openai.com/v1   # or any compatible endpoint
+LLM_MODEL_NAME=gpt-4o-mini
+```
+
+### What LLM enables
+
+| Feature | Without LLM | With LLM |
+|---|---|---|
+| Commander decisions | Rule-based heuristics | OODA loop with context awareness |
+| Battle narrative | Template reports | Dramatic prose with analysis |
+| Enemy dialogue | Scripted lines | In-character intercepted comms |
+| Staff briefing | Status summary | Contextual military briefing |
+| AI difficulty (Hard) | Same as Medium | Aggressive, coordinated doctrine |
 
 ## Configuration
 
